@@ -15,7 +15,10 @@ uv run pytest
 
 测试使用 HTTPX mock transport，不访问网络、不需要真实凭证，也不产生 billable requests。
 
-## Jev client 配置
+## 工具层
+
+`jev_router.tools` 提供可信应用代码配置的 `ToolRegistry` 和五个离线 MVP 工具：calculator、knowledge_search、web_search mock、write_file、send_mock_email mock。工具通过同步 `execute(input)` 接口返回 `ToolResult` 并声明 `read`、`write` 或 `external` 风险；该注册表只负责白名单注册、查找和调用，不包含路由或策略授权。搜索数据由调用方注入，邮件只生成模拟结果，均不访问网络。`WriteFileTool` 必须配置根目录，默认拒绝覆盖。
+
 
 从进程环境读取 `JEV_API_KEY`；可选配置 `JEV_BASE_URL` 和有限的 `JEV_TIMEOUT_SECONDS`。`JevClientConfig.from_env()` 不会自动加载 `.env` 文件；需要使用 `.env` 时，由启动工具或调用方先将变量载入进程环境。仓库 `.env.example` 仅列变量名和占位值；真实密钥不得提交、记录到日志或放入前端。若密钥曾在对话或其他公开位置暴露，应先轮换再使用。
 
