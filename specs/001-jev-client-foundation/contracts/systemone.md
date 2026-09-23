@@ -31,6 +31,6 @@ Verified against the TypeSafe HTTP API reference on 2026-09-23. This contract co
 
 TypeSafe documents authentication/validation, rate-limit, and service-capacity status codes including 401, 422, 429, and 529. The adapter exposes sanitized typed HTTP failures and does not retry automatically. It does not expose authorization data or raw response content.
 
-## Out of scope
+## Feature scope
 
-This contract does not define `GET /v1/models`; that endpoint and response schema remain unverified and must not be guessed.
+This feature covers only `POST /v1/systemone`; model discovery is outside its scope.

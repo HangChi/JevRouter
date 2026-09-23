@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import httpx
 import pytest
@@ -31,27 +32,8 @@ def config() -> JevClientConfig:
     return JevClientConfig(api_key=API_KEY)
 
 
-def answer_payload() -> Dict[str, Any]:
-    return {
-        "model": "test-model",
-        "answers": {
-            "ready": {"type": "noul", "noul": 0.91},
-            "route": {
-                "type": "choice",
-                "choice": "search",
-                "probabilities": {"search": 0.8, "finish": 0.2},
-                "confidence": 0.8,
-            },
-            "risk": {
-                "type": "score",
-                "score": 1.4,
-                "legend": ["low", "medium", "high"],
-                "probabilities": {"low": 0.2, "medium": 0.7, "high": 0.1},
-                "confidence": 0.7,
-            },
-        },
-        "usage": {"input_tokens": 42, "output_tokens": 9},
-    }
+def answer_payload() -> dict[str, Any]:
+    return {"model": "test-model", "answers": {"ready": {"type": "noul", "noul": 0.91}, "route": {"type": "choice", "choice": "search", "probabilities": {"search": 0.8, "finish": 0.2}, "confidence": 0.8}, "risk": {"type": "score", "score": 1.4, "legend": ["low", "medium", "high"], "probabilities": {"low": 0.2, "medium": 0.7, "high": 0.1}, "confidence": 0.7}}, "usage": {"input_tokens": 42, "output_tokens": 9}}
 
 
 def mixed_questions() -> Mapping[str, Any]:
@@ -69,8 +51,21 @@ def mixed_questions() -> Mapping[str, Any]:
 
 
 @pytest.mark.asyncio
+async def test_base_url_path_prefix_is_preserved() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://example.test/proxy/v1/systemone"
+        return httpx.Response(200, json=answer_payload())
+
+    client = JevClient(
+        JevClientConfig(api_key=API_KEY, base_url="https://example.test/proxy/"),
+        httpx.MockTransport(handler),
+    )
+    await client.systemone(model="test-model", state={}, questions=mixed_questions())
+
+
+@pytest.mark.asyncio
 async def test_systemone_sends_documented_payload_and_parses_mixed_answers() -> None:
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
         captured["url"] = str(request.url)
@@ -127,6 +122,12 @@ async def test_invalid_request_is_rejected_before_transport() -> None:
         await client.systemone(model="", state={}, questions={})
     with pytest.raises(RequestValidationError):
         await client.systemone(model="m", state={"bad": object()}, questions=mixed_questions())
+    with pytest.raises(RequestValidationError):
+        await client.systemone(
+            model="m",
+            state={},
+            questions={"bad": NoulQuestion(instructions={"bad": object()})},
+        )
     assert not called
 
 

@@ -2,7 +2,7 @@
 
 ## 项目状态
 
-第一阶段建立了 `jev_router.clients.jev` 中的异步 TypeSafe Jev client，覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question。`GET /v1/models` 的响应 schema 尚无官方文档，暂不实现发现/解析；调用方需要显式提供 model identifier。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
+第一阶段建立了 `jev_router.clients.jev` 中的异步 TypeSafe Jev client，仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question。调用方显式提供 model identifier；模型发现不属于本阶段范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
 ## 安装与检查
 
@@ -17,9 +17,9 @@ uv run pytest
 
 ## Jev client 配置
 
-从服务端环境读取 `JEV_API_KEY`；可选配置 `JEV_BASE_URL` 和有限的 `JEV_TIMEOUT_SECONDS`。仓库 `.env.example` 仅列变量名和占位值；真实密钥不得提交、记录到日志或放入前端。若密钥曾在对话或其他公开位置暴露，应先轮换再使用。
+从进程环境读取 `JEV_API_KEY`；可选配置 `JEV_BASE_URL` 和有限的 `JEV_TIMEOUT_SECONDS`。`JevClientConfig.from_env()` 不会自动加载 `.env` 文件；需要使用 `.env` 时，由启动工具或调用方先将变量载入进程环境。仓库 `.env.example` 仅列变量名和占位值；真实密钥不得提交、记录到日志或放入前端。若密钥曾在对话或其他公开位置暴露，应先轮换再使用。
 
-调用方通过 `JevClientConfig.from_env()` 构造配置，并将模型名传给 `JevClient.systemone(model=..., state=..., questions=...)`。决策请求没有默认自动重试。`/v1/models` 仍待 TypeSafe 公布权威响应契约。
+调用方通过 `JevClientConfig.from_env()` 构造配置，并将模型名传给 `JevClient.systemone(model=..., state=..., questions=...)`。决策请求没有默认自动重试。
 
 ## 依赖方向
 

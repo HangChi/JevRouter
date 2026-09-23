@@ -34,6 +34,3 @@ Question names map to question definitions in `DecisionRequest.questions`; reque
 
 Stable sanitized variants distinguish invalid configuration/request, transport/timeout, HTTP status, JSON decoding, and response schema failures. Public text and structured context must exclude the API key, authorization header, and untrusted raw response bodies.
 
-## Model discovery
-
-No `JevModel` response entity is defined until TypeSafe documents `/v1/models`. Returning inferred metadata would create an unsupported provider contract.

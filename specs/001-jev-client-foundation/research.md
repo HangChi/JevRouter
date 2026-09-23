@@ -2,9 +2,9 @@
 
 ## Provider contract
 
-- Decision: Implement only `POST /v1/systemone` using fields and response structures documented by TypeSafe. Do not implement `GET /v1/models` until its response contract is documented by an authoritative source.
-- Rationale: The official API reference confirms the decision endpoint and its typed question/answer schemas but does not specify the model-list schema. The product design document is not a provider contract.
-- Alternatives considered: Guessing conventional model-list keys such as `data`, `models`, or `id` was rejected because this can silently misparse provider responses.
+- Decision: Implement only `POST /v1/systemone` using fields and response structures documented by TypeSafe; model discovery is outside this feature's scope.
+- Rationale: This feature is limited to the documented decision endpoint and its typed question/answer schemas.
+- Alternatives considered: Adding model discovery to this feature was rejected to keep its scope focused on decision requests.
 
 ## Decision request behavior
 

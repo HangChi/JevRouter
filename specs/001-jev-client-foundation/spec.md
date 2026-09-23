@@ -6,20 +6,7 @@
 
 ## User Scenarios & Testing
 
-### User Story 1 - Discover available Jev models (Priority: P1, blocked on provider contract)
-
-As an application developer, I need to retrieve models available to the configured account so that callers can select a supported model without permanently hard-coding an account-specific name.
-
-**Why this priority**: Discovery would make the integration usable across accounts and model updates, but the endpoint response contract must be confirmed before implementing it.
-
-**Independent Test**: Once TypeSafe documents the endpoint and response schema, use a mocked service to validate typed model results and sanitized failures without credentials or network access.
-
-**Acceptance Scenarios**:
-1. **Given** an official documented model-list contract, **When** the client requests available models, **Then** it returns typed entries using only documented identifying fields.
-2. **Given** the service rejects credentials, **When** the client requests models, **Then** it returns a sanitized, typed authentication error without exposing the credential.
-3. **Given** the endpoint contract remains undocumented, **When** the client is used, **Then** it does not guess the response format and reports model discovery as unavailable.
-
-### User Story 2 - Submit typed decision questions (Priority: P1)
+### User Story 1 - Submit typed decision questions (Priority: P1)
 
 As an application developer, I need to submit a shared state with one or more supported typed questions and receive their structured answers so that downstream application policy can make deterministic choices.
 
@@ -34,7 +21,7 @@ As an application developer, I need to submit a shared state with one or more su
 4. **Given** a response missing required fields, containing invalid probabilities, or inconsistent with the question type, **When** parsed, **Then** the client reports a response-validation error rather than fabricating a decision.
 5. **Given** an HTTP error, timeout, or unavailable service, **When** a decision is requested, **Then** the client returns a typed failure and does not silently retry a potentially billable request.
 
-### User Story 3 - Configure and operate the client safely (Priority: P2)
+### User Story 2 - Configure and operate the client safely (Priority: P2)
 
 As an operator, I need to configure the service endpoint, credential, and timeouts outside source code so that the client can run in local and deployed environments without leaking secrets.
 
@@ -47,7 +34,6 @@ As an operator, I need to configure the service endpoint, credential, and timeou
 
 ## Edge Cases
 
-- Empty model list, duplicate model identifiers, and unknown optional model metadata.
 - Empty state, non-JSON-compatible state values, no questions, excessive question count, empty choice options, and duplicate question names.
 - Choice responses whose selected value is not among the submitted options.
 - Probability values outside [0, 1], non-finite numbers, missing probability maps, and confidence inconsistent with the provider schema.
@@ -59,7 +45,7 @@ As an operator, I need to configure the service endpoint, credential, and timeou
 
 ### Functional Requirements
 
-- **FR-001**: The client MUST expose model discovery only after an authoritative provider contract defines the endpoint response; until then, it MUST report discovery as unavailable and MUST NOT infer a response schema.
+- **FR-001**: The client MUST support the documented `POST /v1/systemone` decision operation; model discovery is outside this feature's scope.
 - **FR-002**: The client MUST support submitting a shared JSON-compatible state and named questions of types `noul`, `choice`, and `score`.
 - **FR-003**: The client MUST allow multiple supported question types in one request and associate each validated answer with its question name.
 - **FR-004**: The client MUST validate request question definitions before network transmission.
@@ -73,7 +59,6 @@ As an operator, I need to configure the service endpoint, credential, and timeou
 
 ### Key Entities
 
-- **JevModel**: Provider model identifier plus documented descriptive metadata.
 - **DecisionRequest**: Selected model, shared state, and named question definitions.
 - **QuestionDefinition**: A question name, supported type, instructions, and type-specific criteria/options.
 - **DecisionResponse**: Validated per-question typed answer and provider-supplied probability/confidence metadata.

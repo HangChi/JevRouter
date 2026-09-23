@@ -26,6 +26,6 @@ Expected result: all tests pass without network access or billable service reque
 
 ## Optional local usage
 
-Set `JEV_API_KEY` in an ignored local `.env` file or export it in the server environment. The key is never placed in source, client-side code, docs, or test fixtures. Supply the desired model identifier explicitly until model discovery has a documented response contract.
+Set `JEV_API_KEY` in an ignored local `.env` file or export it in the server environment. The key is never placed in source, client-side code, docs, or test fixtures. Supply the desired model identifier explicitly when making a decision request.
 
 A live service call is deliberately not part of the default quickstart because it may incur cost. Do not use a credential previously exposed in chat; rotate it before any authorized live call.

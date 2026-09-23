@@ -3,15 +3,16 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, Union
+from typing import Any, Optional, Union
 from urllib.parse import urljoin
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-JSONValue = Union[None, bool, int, float, str, list, dict]
-QuestionInstructions = Union[str, dict, list]
+JSONValue = Union[None, bool, int, float, str, list[Any], dict[str, Any]]
+QuestionInstructions = Union[str, dict[str, Any], list[Any]]
 
 
 class JevClientError(Exception):
@@ -66,7 +67,7 @@ class JevClientConfig:
             raise ConfigurationError("JEV_TIMEOUT_SECONDS must be a finite positive number")
 
     @classmethod
-    def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> "JevClientConfig":
+    def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> JevClientConfig:
         env = os.environ if environ is None else environ
         key = env.get("JEV_API_KEY", "")
         if not key:
@@ -91,11 +92,11 @@ class NoulQuestion(QuestionBase):
 
 class ChoiceQuestion(QuestionBase):
     type: str = "choice"
-    criteria: Dict[str, str]
+    criteria: dict[str, str]
 
     @field_validator("criteria")
     @classmethod
-    def validate_criteria(cls, value: Dict[str, str]) -> Dict[str, str]:
+    def validate_criteria(cls, value: dict[str, str]) -> dict[str, str]:
         if not value or len(value) > 255:
             raise ValueError("choice criteria must contain 1 to 255 candidates")
         return value
@@ -136,12 +137,12 @@ class NoulAnswer(AnswerBase):
 class ChoiceAnswer(AnswerBase):
     type: str = "choice"
     choice: str
-    probabilities: Dict[str, float]
+    probabilities: dict[str, float]
     confidence: float
 
     @field_validator("probabilities")
     @classmethod
-    def validate_probabilities(cls, value: Dict[str, float]) -> Dict[str, float]:
+    def validate_probabilities(cls, value: dict[str, float]) -> dict[str, float]:
         _validate_distribution(value)
         return value
 
@@ -155,7 +156,7 @@ class ScoreAnswer(AnswerBase):
     type: str = "score"
     score: float
     legend: list[str]
-    probabilities: Dict[str, float]
+    probabilities: dict[str, float]
     confidence: float
 
     @field_validator("score")
@@ -167,7 +168,7 @@ class ScoreAnswer(AnswerBase):
 
     @field_validator("probabilities")
     @classmethod
-    def validate_probabilities(cls, value: Dict[str, float]) -> Dict[str, float]:
+    def validate_probabilities(cls, value: dict[str, float]) -> dict[str, float]:
         _validate_distribution(value)
         return value
 
@@ -189,7 +190,7 @@ class Usage(BaseModel):
 class DecisionResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
     model: str
-    answers: Dict[str, Answer]
+    answers: dict[str, Answer]
     usage: Usage
 
 
@@ -202,16 +203,17 @@ class JevClient:
         self,
         *,
         model: str,
-        state: Union[str, list, dict],
+        state: Union[str, list[Any], dict[str, Any]],
         questions: Mapping[str, Question],
     ) -> DecisionResponse:
         if not model or not questions:
             raise RequestValidationError("model and at least one question are required")
         try:
-            json.dumps(state, allow_nan=False)
             serialized_questions = {name: question.model_dump(exclude_none=True) for name, question in questions.items()}
             if any(not name.strip() for name in questions):
                 raise ValueError("question names must not be empty")
+            payload = {"model": model, "state": state, "questions": serialized_questions}
+            json.dumps(payload, allow_nan=False)
         except (TypeError, ValueError) as exc:
             raise RequestValidationError("request contains invalid JSON-compatible values") from exc
 
@@ -221,7 +223,7 @@ class JevClient:
                 response = await client.post(
                     urljoin(self.config.base_url.rstrip("/") + "/", "v1/systemone"),
                     headers={"Authorization": "Bearer " + self.config.api_key},
-                    json={"model": model, "state": state, "questions": serialized_questions},
+                    json=payload,
                 )
             except httpx.TimeoutException as exc:
                 raise TransportError("Jev service request timed out") from exc
@@ -244,7 +246,7 @@ class JevClient:
 
 def _validate_probability(value: float, label: str) -> float:
     if not math.isfinite(value) or not 0 <= value <= 1:
-        raise ValueError("{} must be finite and between 0 and 1".format(label))
+        raise ValueError(f"{label} must be finite and between 0 and 1")
     return value
 
 
@@ -267,12 +269,12 @@ def _validate_answers(response: DecisionResponse, questions: Mapping[str, Questi
             raise ValueError("answer type must match question type")
         if isinstance(question, ChoiceQuestion):
             if not isinstance(answer, ChoiceAnswer):
-                raise ValueError("choice question requires choice answer")
+                raise TypeError("choice question requires choice answer")
             if answer.choice not in question.criteria or set(answer.probabilities) != set(question.criteria):
                 raise ValueError("choice answer must match submitted criteria")
         if isinstance(question, ScoreQuestion):
             if not isinstance(answer, ScoreAnswer):
-                raise ValueError("score question requires score answer")
+                raise TypeError("score question requires score answer")
             if answer.legend != question.criteria or set(answer.probabilities) != set(question.criteria):
                 raise ValueError("score answer must match submitted criteria")
 

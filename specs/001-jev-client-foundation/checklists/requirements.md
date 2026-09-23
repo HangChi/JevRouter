@@ -31,5 +31,5 @@
 
 ## Notes
 
-- User Story 1 and FR-001 explicitly block model discovery until the provider publishes an authoritative endpoint response contract. The rest of the spec remains actionable for `/v1/systemone`.
+- Model discovery is explicitly outside this feature's scope; all remaining requirements concern `/v1/systemone`.
 - Remaining failures reflect engineering-oriented requirements and implementation-focused success criteria. They are retained because this feature specifies a reusable service client; avoid presenting the checklist as fully passed.
