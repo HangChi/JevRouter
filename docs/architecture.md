@@ -14,7 +14,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `jev_router/router.py` | 构建路由判断输入并解析 typed decision |
 | `jev_router/policy.py` | 将置信度、风险与确认要求映射到允许的控制动作 |
 | `jev_router/runner.py` | 有预算上限的 route/execute/verify 状态循环 |
-| `jev_router/verifier.py` | 判断结果是否满足目标，以及下一步控制动作 |
+| `jev_router/verifier.py` | 判断结果是否满足目标，并给出完成概率与结果质量评估 |
 | `jev_router/tools/base.py` | 工具输入、输出、风险等级和执行协议 |
 | `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
 | `apps/api/` | HTTP 边界、配置、存储和核心服务装配 |
@@ -31,7 +31,7 @@ Core task state and execution budgets are immutable snapshots. State advancement
 2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；候选工具只来自可信注册配置，模型名从服务能力发现或配置中获取，不永久硬编码。
 3. Policy Engine revalidates that a recommended tool action is currently registered, then applies explicit confidence, risk, confirmation, and reasoning thresholds to select a control outcome. `execute` is not a tool call; any required explicit user approval must be obtained separately by the caller.
 4. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
-5. verifier 决定任务是否完成；未完成时受预算约束地返回循环。
+5. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
 6. 每一步写入 trace，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟。
 
 MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, `needs_reasoning > 0.70`, and route confidence `< 0.75`, in that precedence. They are initial project values, not TypeSafe recommendations, and should later be calibrated against evals. Unknown or no-longer-registered actions fail closed with `reject`.
