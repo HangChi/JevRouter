@@ -8,7 +8,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 
 | 路径 | 职责 |
 | --- | --- |
-| `jev_router/state.py` | 任务状态、预算、步骤和结果的数据模型 |
+| `jev_router/state.py` | Immutable task snapshots, step history, and finite execution budgets |
 | `jev_router/clients/jev.py` | Jev HTTP/API 适配，隔离供应商 schema |
 | `jev_router/clients/llm.py` | LLM 规范化、推理委托和内容生成适配 |
 | `jev_router/router.py` | 构建路由判断输入并解析 typed decision |
@@ -20,6 +20,8 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `apps/api/` | HTTP 边界、配置、存储和核心服务装配 |
 | `apps/web/` | 发起任务、确认待办、查看运行 trace |
 | `evals/` | 固定数据集、基线运行和指标计算 |
+
+Core task state and execution budgets are immutable snapshots. State advancement records each completed action/result; budget consumption decrements a finite step or model-call allowance and rejects exhausted limits. The later Runner owns when to consume these budgets and how to stop. Persistence and serialization are outside the state contract.
 
 核心包不应依赖 FastAPI 或前端框架。服务适配器负责将供应商响应转换为内部模型，避免供应商字段渗入 policy 和 runner。
 
