@@ -1,7 +1,7 @@
 # Feature Specification: Decision Router
 
 **Feature Branch**: `003-router`
-**Status**: In progress
+**Status**: Complete
 
 ## Goal
 

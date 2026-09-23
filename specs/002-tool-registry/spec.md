@@ -1,7 +1,7 @@
 # Feature Specification: Tool Registry and MVP Tools
 
 **Feature Branch**: `002-tool-registry`
-**Status**: In progress
+**Status**: Complete
 
 ## Goal
 
