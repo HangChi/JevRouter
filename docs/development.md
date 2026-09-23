@@ -21,10 +21,11 @@ uv run pytest
 
 ## Router
 
-`jev_router.Router` 基于调用方提供的任务状态、模型标识和 `ToolRegistry`，一次性请求下一动作、风险、确认需求及推理需求，并返回 `RouteDecision`。动作候选由注册工具和 `ask_user`、`delegate_to_llm`、`finish` 组成。Router 仅提供建议，不授权、不执行工具；授权阈值和执行循环属于后续 Policy/Runner 阶段。
+`jev_router.Router` 基于调用方提供的任务状态、模型标识和 `ToolRegistry`，一次性请求下一动作、风险、确认需求及推理需求，并返回 `RouteDecision`。动作候选由注册工具和 `ask_user`、`delegate_to_llm`、`finish` 组成。Router 仅提供建议，不授权、不执行工具；本地决策由 Policy Engine 完成。
 
+## Policy Engine
 
-从进程环境读取 `JEV_API_KEY`；可选配置 `JEV_BASE_URL` 和有限的 `JEV_TIMEOUT_SECONDS`。`JevClientConfig.from_env()` 不会自动加载 `.env` 文件；需要使用 `.env` 时，由启动工具或调用方先将变量载入进程环境。仓库 `.env.example` 仅列变量名和占位值；真实密钥不得提交、记录到日志或放入前端。若密钥曾在对话或其他公开位置暴露，应先轮换再使用。
+`jev_router.PolicyEngine` 将 `RouteDecision` 映射为显式控制结果，不执行工具。MVP 初始阈值为 `requires_confirmation > 0.75` 或 `risk >= 2.5` 时请求确认；否则 `needs_reasoning > 0.70` 或动作置信度 `< 0.75` 时委托 LLM；其余已注册工具动作才返回 `execute`。`ask_user`、`delegate_to_llm`、`finish` 是对应控制分支，未注册动作拒绝。阈值是项目初值而非服务商推荐，应由 eval 校准。`execute` 不是执行调用；确认结果仍需调用方获取明确的用户批准。
 
 调用方通过 `JevClientConfig.from_env()` 构造配置，并将模型名传给 `JevClient.systemone(model=..., state=..., questions=...)`。决策请求没有默认自动重试。
 

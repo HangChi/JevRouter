@@ -27,12 +27,14 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 
 1. 校验并规范化用户目标及可用工具集合。
 2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；候选工具只来自可信注册配置，模型名从服务能力发现或配置中获取，不永久硬编码。
-3. Policy Engine 校验候选动作确实可用，并使用显式配置阈值决定执行、确认、委托或结束。
+3. Policy Engine revalidates that a recommended tool action is currently registered, then applies explicit confidence, risk, confirmation, and reasoning thresholds to select a control outcome. `execute` is not a tool call; any required explicit user approval must be obtained separately by the caller.
 4. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
 5. verifier 决定任务是否完成；未完成时受预算约束地返回循环。
 6. 每一步写入 trace，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟。
 
-模型提供建议而非授权。`finish`、`ask_user` 和 `delegate_to_llm` 必须作为受控分支处理，不能被当作工具名无条件执行。
+MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, `needs_reasoning > 0.70`, and route confidence `< 0.75`, in that precedence. They are initial project values, not TypeSafe recommendations, and should later be calibrated against evals. Unknown or no-longer-registered actions fail closed with `reject`.
+
+模型提供建议而非授权。`finish`、`ask_user` 和 `delegate_to_llm` 必须作为受控分支处理，不能被当作工具名无条件执行。Policy Engine 只返回控制结果，不调用工具，也不代替用户确认。
 
 ## 状态和持久化
 
