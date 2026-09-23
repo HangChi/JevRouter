@@ -6,9 +6,18 @@ from typing import Any
 
 import httpx
 import pytest
+from support import (
+    EMAIL_CANDIDATES,
+    OPAQUE_CANDIDATES,
+    TEST_MODEL,
+    WRITE_FILE_CANDIDATES,
+    FakeJev,
+    StubResolver,
+    route_answers,
+    verify_answers,
+)
 
 from jev_router.clients.jev import JevClient, JevClientConfig, NoulQuestion, TransportError
-from jev_router.router import RISK_LEVELS
 from jev_router.runner import (
     DEFAULT_COMPLETION_THRESHOLD,
     Runner,
@@ -20,113 +29,6 @@ from jev_router.tools.calculator import CalculatorTool
 from jev_router.tools.mock_email import MockEmailTool
 from jev_router.tools.registry import ToolRegistry
 from jev_router.tools.write_file import WriteFileTool
-from jev_router.verifier import QUALITY_LEVELS
-
-CALCULATOR_CANDIDATES = ("calculator", "ask_user", "delegate_to_llm", "finish")
-WRITE_FILE_CANDIDATES = ("write_file", "ask_user", "delegate_to_llm", "finish")
-EMAIL_CANDIDATES = ("send_mock_email", "ask_user", "delegate_to_llm", "finish")
-OPAQUE_CANDIDATES = ("opaque", "ask_user", "delegate_to_llm", "finish")
-
-
-class FakeJev:
-    """Serves canned systemone responses, keyed by which question set was asked."""
-
-    def __init__(self, *, fail_verify_transport: bool = False) -> None:
-        self.routes: list[dict[str, Any]] = []
-        self.verifies: list[dict[str, Any]] = []
-        self.requests: list[dict[str, Any]] = []
-        self.fail_verify_transport = fail_verify_transport
-
-    def transport(self) -> httpx.MockTransport:
-        async def handler(request: httpx.Request) -> httpx.Response:
-            payload = json.loads(request.content)
-            self.requests.append(payload)
-            if self.fail_verify_transport and "task_complete" in payload["questions"]:
-                raise httpx.ConnectError("verification endpoint is unreachable")
-            queue = self.routes if "next_action" in payload["questions"] else self.verifies
-            if not queue:
-                raise AssertionError("the runner issued more Jev requests than expected")
-            return httpx.Response(
-                200,
-                json={
-                    "model": "test-model",
-                    "answers": queue.pop(0),
-                    "usage": {"input_tokens": 10, "output_tokens": 5},
-                },
-            )
-
-        return httpx.MockTransport(handler)
-
-    def route_calls(self) -> int:
-        return sum(1 for item in self.requests if "next_action" in item["questions"])
-
-    def verify_calls(self) -> int:
-        return sum(1 for item in self.requests if "task_complete" in item["questions"])
-
-
-def choice_answer(
-    action: str,
-    candidates: tuple[str, ...],
-    confidence: float = 0.9,
-) -> dict[str, Any]:
-    probabilities = {name: 0.0 for name in candidates}
-    probabilities[action] = 1.0
-    return {
-        "type": "choice",
-        "choice": action,
-        "probabilities": probabilities,
-        "confidence": confidence,
-    }
-
-
-def risk_answer(score: float = 1.0, confidence: float = 0.8) -> dict[str, Any]:
-    return {
-        "type": "score",
-        "score": score,
-        "legend": list(RISK_LEVELS),
-        "probabilities": {level: 0.2 for level in RISK_LEVELS},
-        "confidence": confidence,
-    }
-
-
-def route_answers(
-    action: str = "calculator",
-    candidates: tuple[str, ...] = CALCULATOR_CANDIDATES,
-    *,
-    confidence: float = 0.9,
-    risk: float = 1.0,
-    requires_confirmation: float = 0.1,
-    needs_reasoning: float = 0.1,
-) -> dict[str, Any]:
-    return {
-        "next_action": choice_answer(action, candidates, confidence),
-        "risk": risk_answer(risk),
-        "requires_confirmation": {"type": "noul", "noul": requires_confirmation},
-        "needs_reasoning": {"type": "noul", "noul": needs_reasoning},
-    }
-
-
-def verify_answers(completion: float = 0.82, quality: float = 3.0) -> dict[str, Any]:
-    return {
-        "task_complete": {"type": "noul", "noul": completion},
-        "result_quality": {
-            "type": "score",
-            "score": quality,
-            "legend": list(QUALITY_LEVELS),
-            "probabilities": {level: 0.25 for level in QUALITY_LEVELS},
-            "confidence": 0.6,
-        },
-    }
-
-
-class StubResolver:
-    def __init__(self, arguments: Any = None) -> None:
-        self.arguments = arguments if arguments is not None else {"expression": "2 + 2"}
-        self.calls: list[tuple[str, TaskState]] = []
-
-    async def resolve(self, action: str, state: TaskState) -> Any:
-        self.calls.append((action, state))
-        return self.arguments
 
 
 class StubConfirmation:
@@ -211,7 +113,7 @@ def build(
 ) -> Runner:
     return Runner(
         client=JevClient(JevClientConfig(api_key="test-key"), fake.transport()),
-        model="test-model",
+        model=TEST_MODEL,
         tools=tools if tools is not None else ToolRegistry([CalculatorTool()]),
         budget=budget or ExecutionBudget(max_steps=4, max_model_calls=8),
         completion_threshold=completion_threshold,
@@ -549,7 +451,7 @@ async def test_model_call_budget_must_cover_route_and_verify() -> None:
     with pytest.raises(ValueError, match="max_model_calls"):
         Runner(
             client=JevClient(JevClientConfig(api_key="test-key")),
-            model="test-model",
+            model=TEST_MODEL,
             tools=ToolRegistry([CalculatorTool()]),
             budget=ExecutionBudget(max_steps=4, max_model_calls=4),
         )
@@ -562,7 +464,7 @@ async def test_route_transport_failure_fails_the_run() -> None:
 
     runner = Runner(
         client=JevClient(JevClientConfig(api_key="test-key"), httpx.MockTransport(handler)),
-        model="test-model",
+        model=TEST_MODEL,
         tools=ToolRegistry([CalculatorTool()]),
         budget=ExecutionBudget(max_steps=2, max_model_calls=4),
     )
@@ -654,7 +556,7 @@ async def test_traces_are_emitted_in_order_with_diagnostics() -> None:
     assert list(result.traces) == sink.traces
     for trace in result.traces:
         assert trace.duration_ms >= 0
-        assert trace.model == "test-model"
+        assert trace.model == TEST_MODEL
         assert trace.state_snapshot is not None
         assert trace.route_confidence == 0.9
         assert trace.route_risk == 1.0
@@ -756,7 +658,7 @@ async def test_transport_error_category_is_reported() -> None:
     client = JevClient(JevClientConfig(api_key="test-key"), httpx.MockTransport(handler))
     with pytest.raises(TransportError) as excinfo:
         await client.systemone(
-            model="test-model",
+            model=TEST_MODEL,
             state={"goal": "x"},
             questions={"q": NoulQuestion(instructions="Is this reachable?")},
         )

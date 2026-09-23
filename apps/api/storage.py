@@ -144,6 +144,23 @@ def _verification_to_row(task_id: str, step: int, decision: VerificationDecision
     )
 
 
+class IncrementalSink:
+    """A ``TraceSink`` that writes each step as the Runner emits it.
+
+    It must expose ``emit`` rather than be a bare callable: the Runner's
+    ``TraceSink`` is a Protocol with that method, and a missing attribute is
+    swallowed by the Runner's own sink-error guard.
+    """
+
+    def __init__(self, store: TraceStore) -> None:
+        self._store = store
+
+    def emit(self, trace: StepTrace) -> None:
+        with self._store._connection:
+            self._store._ensure_task(trace)
+            self._store._write_step(trace)
+
+
 class TraceStore:
     """SQLite persistence for run traces.
 
@@ -163,7 +180,10 @@ class TraceStore:
         if self._path.parent and not self._path.parent.exists():
             raise StorageError(f"database directory does not exist: {self._path.parent}")
         self._redact = redact
-        self._connection = sqlite3.connect(self._path)
+        # The connection is created wherever the store is constructed, which is
+        # not necessarily the thread the event loop runs in. All access is still
+        # serialized through that one loop, so relaxing the thread check is safe.
+        self._connection = sqlite3.connect(self._path, check_same_thread=False)
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._apply_schema()
 
@@ -228,30 +248,27 @@ class TraceStore:
             for trace in result.traces:
                 self._write_step(trace)
 
-    def sink(self) -> Callable[[StepTrace], None]:
+    def sink(self) -> IncrementalSink:
         """Return a TraceSink that writes each step as the Runner emits it."""
+        return IncrementalSink(self)
 
-        def emit(trace: StepTrace) -> None:
-            with self._connection:
-                self._connection.execute(
-                    """
-                    INSERT INTO tasks (task_id, goal, status, step, diagnostic,
-                                       created_at, updated_at, final_state)
-                    VALUES (?, ?, ?, 0, NULL, ?, ?, ?)
-                    ON CONFLICT (task_id) DO UPDATE SET updated_at = excluded.updated_at
-                    """,
-                    (
-                        trace.task_id,
-                        trace.state_snapshot.get("goal", "") if trace.state_snapshot else "",
-                        RUNNING_STATUS,
-                        _now(),
-                        _now(),
-                        _encode({}),
-                    ),
-                )
-                self._write_step(trace)
-
-        return emit
+    def _ensure_task(self, trace: StepTrace) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO tasks (task_id, goal, status, step, diagnostic,
+                               created_at, updated_at, final_state)
+            VALUES (?, ?, ?, 0, NULL, ?, ?, ?)
+            ON CONFLICT (task_id) DO UPDATE SET updated_at = excluded.updated_at
+            """,
+            (
+                trace.task_id,
+                trace.state_snapshot.get("goal", "") if trace.state_snapshot else "",
+                RUNNING_STATUS,
+                _now(),
+                _now(),
+                _encode({}),
+            ),
+        )
 
     def _write_step(self, trace: StepTrace) -> None:
         task_id = trace.task_id

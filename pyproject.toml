@@ -8,8 +8,10 @@ version = "0.1.0"
 description = "Typed Jev decision client and agent routing foundation"
 requires-python = ">=3.9"
 dependencies = [
+  "fastapi>=0.128.8,<1",
   "httpx>=0.27,<1",
   "pydantic>=2.8,<3",
+  "uvicorn>=0.39.0,<1",
 ]
 
 [dependency-groups]
@@ -33,6 +35,10 @@ line-length = 100
 
 [tool.ruff.lint]
 ignore = ["UP006", "UP007", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Depends() in a default argument is the documented FastAPI idiom.
+"apps/api/app.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.10"

@@ -1,0 +1,383 @@
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+from support import (
+    TEST_MODEL,
+    WRITE_FILE_CANDIDATES,
+    FakeJev,
+    StubResolver,
+    route_answers,
+    verify_answers,
+)
+
+from apps.api.app import create_app, default_registry
+from apps.api.config import Settings
+from apps.api.storage import TraceStore
+from jev_router.clients.jev import JevClient, JevClientConfig
+from jev_router.tools import CalculatorTool, ToolRegistry, WriteFileTool
+
+TERMINAL = frozenset(
+    {
+        "completed",
+        "needs_user_input",
+        "needs_confirmation",
+        "rejected",
+        "budget_exhausted",
+        "failed",
+    }
+)
+
+SECRET = "sk-live-should-never-be-returned"
+AWAITING_CONFIRMATION = frozenset({"awaiting_confirmation"})
+AWAITING_INPUT = frozenset({"awaiting_input"})
+
+
+@pytest.fixture
+def api(tmp_path: Path):
+    created: list[TraceStore] = []
+
+    def make(
+        fake: FakeJev,
+        *,
+        tools: ToolRegistry | None = None,
+        resolver: Any = None,
+        **settings: Any,
+    ) -> TestClient:
+        resolved = Settings(
+            model=TEST_MODEL,
+            database_path=str(tmp_path / f"traces-{len(created)}.db"),
+            workspace_root=str(tmp_path / f"workspace-{len(created)}"),
+            jev=JevClientConfig(api_key=SECRET),
+            **settings,
+        )
+        store = TraceStore(resolved.database_path)
+        created.append(store)
+        app = create_app(
+            resolved,
+            store=store,
+            tools=tools if tools is not None else ToolRegistry([CalculatorTool()]),
+            resolver=resolver if resolver is not None else StubResolver(),
+            client=JevClient(resolved.jev, fake.transport()),
+        )
+        return TestClient(app)
+
+    yield make
+    for store in created:
+        store.close()
+
+
+def wait_for(
+    client: TestClient, task_id: str, statuses: frozenset[str], timeout: float = 5.0
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        body = client.get(f"/tasks/{task_id}").json()
+        if body["status"] in statuses:
+            return body
+        time.sleep(0.005)
+    raise AssertionError(f"run {task_id} never reached {sorted(statuses)}")
+
+
+def wait_for_terminal(client: TestClient, task_id: str) -> dict[str, Any]:
+    return wait_for(client, task_id, TERMINAL)
+
+
+def submit(client: TestClient, goal: str = "Calculate 2 + 2") -> str:
+    response = client.post("/tasks", json={"goal": goal})
+    assert response.status_code == 202
+    return response.json()["task_id"]
+
+
+def test_submitting_a_task_is_accepted(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["task_id"] == task_id
+    assert body["status"] == "completed"
+    assert body["goal"] == "Calculate 2 + 2"
+    assert body["step"] == 1
+    assert body["diagnostic"] is None
+    assert body["pending_confirmation"] is None
+
+
+def test_traces_are_served_for_a_finished_run(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client)
+        wait_for_terminal(client, task_id)
+        response = client.get(f"/tasks/{task_id}/traces")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["task_id"] == task_id
+    assert len(payload["traces"]) == 1
+    trace = payload["traces"][0]
+    assert trace["action"] == "calculator"
+    assert trace["policy_outcome"] == "execute"
+    assert trace["executed"] is True
+    assert trace["result"] == {"result": 4.0}
+    assert trace["completion_probability"] == 0.82
+    assert trace["quality_score"] == 3.0
+    assert trace["route_confidence"] == 0.9
+    assert trace["duration_ms"] >= 0
+
+
+def test_traces_are_served_while_the_run_is_still_going(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("ask_user"))
+
+    with api(fake) as client:
+        task_id = submit(client, "Find the weather in Tokyo")
+        body = wait_for(client, task_id, AWAITING_INPUT)
+
+        assert body["status"] == "awaiting_input"
+        response = client.get(f"/tasks/{task_id}/traces")
+
+    assert response.status_code == 200
+    # The blocked step has not completed, so the Runner has not emitted its trace
+    # yet; what is pending is reported by the task itself.
+    assert response.json()["traces"] == []
+    assert body["pending_input"] == {"question": "ask_user", "step": 0}
+
+
+def test_an_unknown_task_is_not_found(api: Any) -> None:
+    fake = FakeJev()
+    with api(fake) as client:
+        assert client.get("/tasks/missing").status_code == 404
+        assert client.get("/tasks/missing/traces").status_code == 404
+        assert client.post("/tasks/missing/confirm", json={"approved": True}).status_code == 404
+        assert client.post("/tasks/missing/input", json={"answer": "Tokyo"}).status_code == 404
+
+
+def test_an_empty_goal_is_rejected(api: Any) -> None:
+    fake = FakeJev()
+    with api(fake) as client:
+        assert client.post("/tasks", json={"goal": ""}).status_code == 422
+        assert client.post("/tasks", json={"goal": "   "}).status_code == 422
+        assert client.post("/tasks", json={}).status_code == 422
+
+
+def test_unknown_fields_are_rejected(api: Any) -> None:
+    fake = FakeJev()
+    with api(fake) as client:
+        assert client.post("/tasks", json={"goal": "x", "nope": 1}).status_code == 422
+        assert client.post("/tasks/x/confirm", json={"approved": True, "nope": 1}).status_code == 422
+
+
+def test_a_write_tool_waits_for_confirmation_with_its_arguments(api: Any, tmp_path: Path) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("write_file", WRITE_FILE_CANDIDATES))
+    fake.verifies.append(verify_answers(0.82))
+    arguments = {"path": "note.txt", "content": "hello"}
+
+    workspace = tmp_path / "workspace-0"
+    with api(
+        fake,
+        tools=ToolRegistry([WriteFileTool(workspace)]),
+        resolver=StubResolver(arguments),
+    ) as client:
+        task_id = submit(client, "Write a note")
+        body = wait_for(client, task_id, AWAITING_CONFIRMATION)
+
+        assert body["status"] == "awaiting_confirmation"
+        pending = body["pending_confirmation"]
+        assert pending is not None
+        assert pending["action"] == "write_file"
+        assert pending["arguments"] == arguments
+        assert pending["step"] == 0
+        assert not (tmp_path / "workspace-0" / "note.txt").exists()
+
+        approved = client.post(f"/tasks/{task_id}/confirm", json={"approved": True})
+        assert approved.status_code == 204
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "completed"
+    assert (tmp_path / "workspace-0" / "note.txt").read_text() == "hello"
+
+
+def test_denied_confirmation_stops_the_run(api: Any, tmp_path: Path) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("write_file", WRITE_FILE_CANDIDATES))
+
+    workspace = tmp_path / "workspace-0"
+    with api(
+        fake,
+        tools=ToolRegistry([WriteFileTool(workspace)]),
+        resolver=StubResolver({"path": "a.txt", "content": "x"}),
+    ) as client:
+        task_id = submit(client, "Write a file")
+        wait_for(client, task_id, AWAITING_CONFIRMATION)
+        client.post(f"/tasks/{task_id}/confirm", json={"approved": False})
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "needs_confirmation"
+    assert not (tmp_path / "workspace-0" / "a.txt").exists()
+
+
+def test_confirming_with_nothing_pending_conflicts(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client)
+        wait_for_terminal(client, task_id)
+        response = client.post(f"/tasks/{task_id}/confirm", json={"approved": True})
+
+    assert response.status_code == 409
+
+
+def test_ask_user_waits_for_input_then_continues(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("ask_user"))
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client, "Find the weather")
+        body = wait_for(client, task_id, AWAITING_INPUT)
+
+        assert body["status"] == "awaiting_input"
+        assert body["pending_input"] == {"question": "ask_user", "step": 0}
+
+        answered = client.post(f"/tasks/{task_id}/input", json={"answer": "Tokyo"})
+        assert answered.status_code == 204
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "completed"
+    assert body["step"] == 2
+    assert fake.route_calls() == 2
+
+
+def test_providing_input_with_nothing_pending_conflicts(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client)
+        wait_for_terminal(client, task_id)
+        response = client.post(f"/tasks/{task_id}/input", json={"answer": "Tokyo"})
+
+    assert response.status_code == 409
+
+
+def test_an_empty_answer_is_rejected(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("ask_user"))
+
+    with api(fake) as client:
+        task_id = submit(client, "Find the weather")
+        wait_for(client, task_id, AWAITING_INPUT)
+        assert client.post(f"/tasks/{task_id}/input", json={"answer": ""}).status_code == 422
+
+
+def test_listing_tasks(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        first = submit(client, "First goal")
+        second = submit(client, "Second goal")
+        wait_for_terminal(client, first)
+        wait_for_terminal(client, second)
+
+        response = client.get("/tasks")
+        assert response.status_code == 200
+        listed = response.json()["tasks"]
+        assert [task["task_id"] for task in listed] == [second, first]
+        assert listed[0]["goal"] == "Second goal"
+
+        assert client.get("/tasks?limit=1").json()["tasks"][0]["task_id"] == second
+        assert client.get("/tasks?limit=0").status_code == 400
+
+
+def test_the_credential_never_appears_in_a_response(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake) as client:
+        task_id = submit(client)
+        wait_for_terminal(client, task_id)
+        bodies = [
+            client.get("/tasks").text,
+            client.get(f"/tasks/{task_id}").text,
+            client.get(f"/tasks/{task_id}/traces").text,
+        ]
+
+    assert SECRET not in "".join(bodies)
+
+
+def test_settings_require_a_model() -> None:
+    with pytest.raises(ValueError, match="JEV_MODEL"):
+        Settings.from_env({"JEV_API_KEY": "k"})
+
+
+def test_settings_reject_a_budget_that_cannot_route_and_verify(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="max_model_calls"):
+        Settings(
+            model=TEST_MODEL,
+            database_path=str(tmp_path / "traces.db"),
+            jev=JevClientConfig(api_key="k"),
+            max_steps=4,
+            max_model_calls=4,
+        )
+
+
+def test_settings_read_the_environment(tmp_path: Path) -> None:
+    settings = Settings.from_env(
+        {
+            "JEV_API_KEY": "k",
+            "JEV_MODEL": "jev-latest",
+            "JEV_DATABASE_PATH": str(tmp_path / "traces.db"),
+            "JEV_MAX_STEPS": "3",
+            "JEV_COMPLETION_THRESHOLD": "0.9",
+        }
+    )
+
+    assert settings.model == "jev-latest"
+    assert settings.max_steps == 3
+    assert settings.max_model_calls == 16
+    assert settings.completion_threshold == 0.9
+    assert settings.budget().max_steps == 3
+
+
+def test_settings_reject_a_non_numeric_threshold(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="JEV_COMPLETION_THRESHOLD"):
+        Settings.from_env(
+            {
+                "JEV_API_KEY": "k",
+                "JEV_MODEL": "m",
+                "JEV_COMPLETION_THRESHOLD": "high",
+            }
+        )
+
+
+def test_the_default_registry_omits_the_search_tools(tmp_path: Path) -> None:
+    settings = Settings(
+        model=TEST_MODEL,
+        database_path=str(tmp_path / "traces.db"),
+        jev=JevClientConfig(api_key="k"),
+    )
+
+    registry = default_registry(settings)
+
+    assert registry.names() == ("calculator", "write_file", "send_mock_email")
+    assert registry.get("write_file").risk == "write"

@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from jev_router.tools.base import ToolResult
+from jev_router.tools.base import RiskLevel, ToolResult
 
 
 class SearchInput(BaseModel):
@@ -24,7 +24,7 @@ class SearchDocument(BaseModel):
 class KnowledgeSearchTool:
     name = "knowledge_search"
     description = "Search an injected set of local knowledge documents."
-    risk = "read"
+    risk: RiskLevel = "read"
 
     def __init__(self, documents: Sequence[SearchDocument | dict[str, Any]]) -> None:
         self._documents = tuple(SearchDocument.model_validate(doc) for doc in documents)

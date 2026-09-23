@@ -4,7 +4,7 @@
 
 已完成六个阶段：Jev client（`jev_router.clients.jev`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；调用方显式提供 model identifier，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
-受限 Runner、trace 持久化已完成；API 的 HTTP 边界与 Web 仪表盘尚未实现，`apps/web/`、`evals/` 仍为空目录。
+受限 Runner、trace 持久化与 API HTTP 边界已完成；Web 仪表盘与 eval 尚未实现，`apps/web/`、`evals/` 仍为空目录。
 
 ## 安装与检查
 
@@ -69,7 +69,21 @@ provider 报错、工具拒绝输入、resolver 返回非 Mapping、`TaskState.a
 
 `redact=` 回调在编码前作用于 result、arguments 和 state_snapshot，这是 `docs/security.md` 要求在持久化用户目标和工具输入/输出前准备的钩子；保留期限与删除策略仍未定义。凭证保证是结构性的——store 只看得见 `RunResult`/`StepTrace`，永远拿不到 `JevClientConfig`，测试用一个 sentinel key 跑完整 run 后断言数据库文件里不出现这些字节。
 
-连接在 `__init__` 建立，`close()` 或上下文管理器关闭。写入同步且短促，与同步 `TraceSink` 匹配；store 不是线程安全的，应由单个事件循环驱动。
+连接在 `__init__` 建立，`close()` 或上下文管理器关闭。写入同步且短促，与同步 `TraceSink` 匹配；store 不是线程安全的，应由单个事件循环驱动。连接以 `check_same_thread=False` 建立，因为创建 store 的线程不一定是事件循环所在的线程，而所有访问仍由同一个 loop 串行化。
+
+## API 层
+
+`apps/api/` 分四个模块：`config.py`（启动时校验的冻结 `Settings`）、`schemas.py`（严格请求/响应模型和存活状态常量）、`service.py`（`TaskService` 运行注册表）、`app.py`（app factory、路由和错误映射）。
+
+run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输入通过 future 解决：handler 在 service 上注册一个 `asyncio.Future` 并 await，后续的 `POST /tasks/{id}/confirm` 或 `/input` 再 resolve 它。Runner 本身没有改动——它只是 await 了一个恰好在于等人的 handler。这样做而不是"停下来带批准重启"，是因为重启会重复执行之前步骤已产生的副作用。
+
+存活状态（`running`/`awaiting_confirmation`/`awaiting_input`）与终态 `RunStatus` 是两套词汇：前者由内存中的 handle 承载，后者由 `record()` 写进 `tasks` 行。被人类阻塞的那一步尚未完成，因此 Runner 还没有发射它的 trace；待办信息由 task 视图的 `pending_confirmation`/`pending_input` 给出，而不是塞进 trace 列表。
+
+路由全部声明为 `async def`：FastAPI 会把同步 handler 丢进线程池，那里没有 running loop，`submit()` 里的 `create_task` 会直接失败。
+
+错误映射：未知 task id → `404`；在不该确认/输入时调用 → `409`；body 过不了严格 schema → `422`；`limit < 1` → `400`。`record()` 失败不会篡改 run 的真实终态，只往 diagnostic 里追记一句，因为逐步 trace 已经由 sink 落库。
+
+`default_registry` 只注册 calculator、write_file 和 send_mock_email；两个搜索工具需要调用方注入文档，不放进默认集合。store 只在 app 自己创建时才由 lifespan 关闭，注入的 store 归调用方所有。
 
 ## 依赖方向
 

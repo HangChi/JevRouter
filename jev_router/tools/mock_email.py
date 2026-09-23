@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from jev_router.tools.base import ToolResult
+from jev_router.tools.base import RiskLevel, ToolResult
 
 
 class MockEmailInput(BaseModel):
@@ -25,7 +25,7 @@ class MockEmailInput(BaseModel):
 class MockEmailTool:
     name = "send_mock_email"
     description = "Validate and simulate an email locally without sending it."
-    risk = "external"
+    risk: RiskLevel = "external"
 
     def execute(self, input: dict[str, Any]) -> ToolResult:
         try:

@@ -6,8 +6,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
+from support import TEST_MODEL, FakeJev, StubResolver, route_answers, verify_answers
 
 from apps.api.storage import (
     PAYLOAD_VERSION,
@@ -17,18 +17,10 @@ from apps.api.storage import (
     TraceStore,
 )
 from jev_router.clients.jev import JevClient, JevClientConfig
-from jev_router.router import RISK_LEVELS
 from jev_router.runner import Runner, StepTrace
 from jev_router.state import ExecutionBudget, TaskState
 from jev_router.tools import CalculatorTool, ToolRegistry
 from jev_router.verifier import QUALITY_LEVELS, VerificationDecision
-
-CANDIDATES = ("calculator", "ask_user", "delegate_to_llm", "finish")
-
-
-class StubResolver:
-    async def resolve(self, action: str, state: Any) -> dict[str, Any]:
-        return {"expression": "2 + 2"}
 
 
 def verification(step: int = 1) -> VerificationDecision:
@@ -37,7 +29,7 @@ def verification(step: int = 1) -> VerificationDecision:
         quality_score=3.0,
         quality_confidence=0.6,
         quality_legend=QUALITY_LEVELS,
-        model="test-model",
+        model=TEST_MODEL,
     )
 
 
@@ -64,7 +56,7 @@ def trace(
         arguments={"expression": "2 + 2"} if result is not None else None,
         verification=verification(step) if with_verification else None,
         state_snapshot={"goal": "Calculate 2 + 2", "step": step - 1, "history": []},
-        model="test-model",
+        model=TEST_MODEL,
         duration_ms=7,
     )
 
@@ -159,7 +151,7 @@ def test_evaluations_are_stored_separately_from_steps(store: TraceStore) -> None
 
 
 def test_incremental_sink_writes_before_the_run_finishes(store: TraceStore) -> None:
-    store.sink()(trace(1, result={"result": 4.0}))
+    store.sink().emit(trace(1, result={"result": 4.0}))
 
     record = store.load_task("task-1")
     assert record is not None
@@ -170,7 +162,7 @@ def test_incremental_sink_writes_before_the_run_finishes(store: TraceStore) -> N
 
 def test_record_finalizes_a_run_written_by_the_sink(store: TraceStore) -> None:
     emit = store.sink()
-    emit(trace(1, result={"result": 4.0}))
+    emit.emit(trace(1, result={"result": 4.0}))
     store.record(make_result(status="completed", traces=(trace(1, result={"result": 4.0}),)))
 
     record = store.load_task("task-1")
@@ -312,63 +304,29 @@ def test_the_store_can_be_used_as_a_context_manager(store_factory: Any) -> None:
 @pytest.mark.asyncio
 async def test_no_credential_reaches_the_database(tmp_path: Path) -> None:
     secret = "sk-live-should-never-be-stored"
-    requests: list[dict[str, Any]] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        payload = json.loads(request.content)
-        requests.append(payload)
-        if "next_action" in payload["questions"]:
-            answers = {
-                "next_action": {
-                    "type": "choice",
-                    "choice": "calculator",
-                    "probabilities": {name: 1.0 if name == "calculator" else 0.0 for name in CANDIDATES},
-                    "confidence": 0.9,
-                },
-                "risk": {
-                    "type": "score",
-                    "score": 1.0,
-                    "legend": list(RISK_LEVELS),
-                    "probabilities": {level: 0.2 for level in RISK_LEVELS},
-                    "confidence": 0.8,
-                },
-                "requires_confirmation": {"type": "noul", "noul": 0.1},
-                "needs_reasoning": {"type": "noul", "noul": 0.1},
-            }
-        else:
-            answers = {
-                "task_complete": {"type": "noul", "noul": 0.82},
-                "result_quality": {
-                    "type": "score",
-                    "score": 3.0,
-                    "legend": list(QUALITY_LEVELS),
-                    "probabilities": {level: 0.25 for level in QUALITY_LEVELS},
-                    "confidence": 0.6,
-                },
-            }
-        return httpx.Response(
-            200,
-            json={
-                "model": "test-model",
-                "answers": answers,
-                "usage": {"input_tokens": 10, "output_tokens": 5},
-            },
-        )
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
 
     database = tmp_path / "traces.db"
     with TraceStore(database) as store:
         runner = Runner(
-            client=JevClient(JevClientConfig(api_key=secret), httpx.MockTransport(handler)),
-            model="test-model",
+            client=JevClient(JevClientConfig(api_key=secret), fake.transport()),
+            model=TEST_MODEL,
             tools=ToolRegistry([CalculatorTool()]),
             budget=ExecutionBudget(max_steps=4, max_model_calls=8),
             resolver=StubResolver(),
             trace_sink=store.sink(),
         )
         result = await runner.run("Calculate 2 + 2")
-        store.record(result)
+        # The sink must have written the step already; record() only finalizes.
+        assert len(store.load_traces(result.task_id)) == 1
         assert store.load_task(result.task_id) is not None
+        assert store.load_task(result.task_id).status == RUNNING_STATUS
+        store.record(result)
+        assert store.load_task(result.task_id).status == "completed"
 
     assert result.status == "completed"
-    assert len(requests) == 2
+    assert fake.route_calls() == 1
+    assert fake.verify_calls() == 1
     assert secret.encode() not in database.read_bytes()

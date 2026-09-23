@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from jev_router.tools.base import ToolResult
+from jev_router.tools.base import RiskLevel, ToolResult
 
 
 class CalculatorInput(BaseModel):
@@ -49,7 +49,7 @@ def _apply_unary(operation: ast.unaryop, value: float) -> float:
 class CalculatorTool:
     name = "calculator"
     description = "Evaluate a bounded arithmetic expression."
-    risk = "read"
+    risk: RiskLevel = "read"
 
     def execute(self, input: dict[str, Any]) -> ToolResult:
         try:

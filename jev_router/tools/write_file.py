@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from jev_router.tools.base import ToolResult
+from jev_router.tools.base import RiskLevel, ToolResult
 
 
 class WriteFileInput(BaseModel):
@@ -17,7 +17,7 @@ class WriteFileInput(BaseModel):
 class WriteFileTool:
     name = "write_file"
     description = "Write a bounded text file under a configured root directory."
-    risk = "write"
+    risk: RiskLevel = "write"
 
     def __init__(self, root: str | Path, *, allow_overwrite: bool = False, max_bytes: int = 1_000_000) -> None:
         if max_bytes < 1:
