@@ -4,18 +4,18 @@
 
 已完成六个阶段：Jev client（`jev_router.clients.jev`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；调用方显式提供 model identifier，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
-受限 Runner、trace 持久化、API 与 Web 仪表盘尚未实现；`apps/api`、`apps/web`、`evals/` 目前为空目录。
+受限 Runner、trace 持久化已完成；API 的 HTTP 边界与 Web 仪表盘尚未实现，`apps/web/`、`evals/` 仍为空目录。
 
 ## 安装与检查
 
 ```sh
 uv sync --all-groups
 uv run ruff check .
-uv run mypy jev_router
+uv run mypy jev_router apps
 uv run pytest
 ```
 
-测试使用 HTTPX mock transport，不访问网络、不需要真实凭证，也不产生 billable requests。
+测试使用 HTTPX mock transport，不访问网络、不需要真实凭证，也不产生 billable requests。存储测试使用临时数据库文件。
 
 ## 工具层
 
@@ -57,6 +57,20 @@ verifier 只做评估：不设完成阈值、不修改状态、不执行工具�
 
 provider 报错、工具拒绝输入、resolver 返回非 Mapping、`TaskState.advance` 拒绝结果，统统收敛为 `failed` 加诊断，不会有异常逃出 `run()`。`TraceSink.emit` 抛出的异常不会中断运行，因为 trace 已经记录在 `RunResult.traces` 里，丢失的只是实时投递。
 
+## Trace 持久化
+
+`apps/api/storage.py` 的 `TraceStore` 只消费 Runner 已经产出的不可变记录，不给核心循环增加任何行为；`jev_router` 里没有任何数据库代码。三张表对应三个概念：`tasks`（一行一个 run，含终止状态、步数、诊断和 final state）、`agent_steps`（一行一条 `StepTrace`）、`evaluations`（一行一次验证，按 `(task_id, step)` 关联，不重复塞进 step 行）。
+
+写入有两条路径，共用一个 upsert：`record(RunResult)` 在一个事务里写终态 task 行和全部 trace；`sink()` 返回的 `TraceSink` 在首次发射时upsert 一个 `running` 标记的 task 行，随后每步落库——进程被 kill 时仍留下可读 trace。两者对同一个 `(task_id, step)` 幂等，所以 sink 之后接 `record()` 只会把状态改成终态，不会产生重复行。
+
+版本有两层且都不自动迁移：`PRAGMA user_version` 记录 schema 版本，比当前构建更新的库直接拒绝打开；每个 JSON 列都包成 `{"version": 1, "data": ...}`，读到的版本不明或根本不是版本化信封就抛 `StorageError`。静默误读会污染 trace 记录，所以拒绝是默认行为。
+
+`_encode` 在值无法序列化时退回 `_degrade`：只把出问题的叶子替换成 `{"__unserializable__": ...}`，非有限浮点同样处理，其余内容保留。工具是在输出被接受之前运行的，所以 trace 里完全可能带着 `TaskState.advance` 已经拒绝过的值；为一个坏输出丢掉整条 run 是不可接受的。
+
+`redact=` 回调在编码前作用于 result、arguments 和 state_snapshot，这是 `docs/security.md` 要求在持久化用户目标和工具输入/输出前准备的钩子；保留期限与删除策略仍未定义。凭证保证是结构性的——store 只看得见 `RunResult`/`StepTrace`，永远拿不到 `JevClientConfig`，测试用一个 sentinel key 跑完整 run 后断言数据库文件里不出现这些字节。
+
+连接在 `__init__` 建立，`close()` 或上下文管理器关闭。写入同步且短促，与同步 `TraceSink` 匹配；store 不是线程安全的，应由单个事件循环驱动。
+
 ## 依赖方向
 
 ```text
@@ -72,6 +86,7 @@ apps/web -> apps/api HTTP contract
 
 - 单元测试：状态转换、策略阈值边界、工具输入校验、预算耗尽。
 - 集成测试：使用 stub HTTP client 验证 Jev request/response 映射和失败处理，不要求真实 API key。
+- 存储测试：临时 SQLite 文件验证 trace 往返、增量写入、版本化载荷、脱敏与降级。
 - API 测试：请求 schema、错误状态码、确认流程及 trace 输出。
 - Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。
 

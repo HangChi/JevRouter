@@ -2,7 +2,7 @@
 
 让 LLM 理解和拆解任务，让 Jev 在有限动作中做带概率的路由决策，再由显式策略控制执行。
 
-> 核心包已完成 Jev client、工具注册表、Router、Policy Engine、任务状态与预算、Verifier 和受限 Runner 七个阶段；trace 持久化、API 与 Web 仪表盘尚未实现。
+> 核心包已完成 Jev client、工具注册表、Router、Policy Engine、任务状态与预算、Verifier、受限 Runner 和 trace 持久化八个阶段；API 与 Web 仪表盘尚未实现。
 
 ## 项目结构
 
@@ -48,9 +48,9 @@ Python 核心负责状态、路由、策略、执行循环和验证；API 层负
 
 ## 开发顺序
 
-已完成：Jev client、工具协议与 registry、Policy Engine、router、任务状态与预算、verifier、受限 runner。
+已完成：Jev client、工具协议与 registry、Policy Engine、router、任务状态与预算、verifier、受限 runner、trace 持久化。
 
-尚未实现：trace 持久化、`apps/api`、Web trace dashboard、eval 与对比指标。`apps/api`、`apps/web`、`evals/` 目前为空目录。保持核心逻辑可在不启动 Web 的情况下测试。
+尚未实现：`apps/api` 的 HTTP 边界、Web trace dashboard、eval 与对比指标。`apps/web/`、`evals/` 仍为空目录。保持核心逻辑可在不启动 Web 的情况下测试。
 
 ## 文档
 
@@ -61,8 +61,8 @@ Python 核心负责状态、路由、策略、执行循环和验证；API 层负
 
 ## 状态
 
-`jev_router/` 已实现并可离线测试：Jev client（`clients/jev.py`）、五个工具与注册表、Router、Policy Engine、不可变任务状态与执行预算、Verifier，以及把它们接成有界循环的 Runner。`uv run pytest` 现有 94 项测试全部通过，ruff 与 strict mypy 干净；测试使用 httpx mock transport，不需要真实凭证。
+`jev_router/` 已实现并可离线测试：Jev client（`clients/jev.py`）、五个工具与注册表、Router、Policy Engine、不可变任务状态与执行预算、Verifier，以及把它们接成有界循环的 Runner。`apps/api/storage.py` 提供 SQLite trace 持久化。`uv run pytest` 现有 114 项测试全部通过，ruff 与 strict mypy 干净；测试使用 httpx mock transport 和临时数据库文件，不需要真实凭证。
 
 TypeSafe API 的请求/响应 schema 已在第一阶段依据官方文档确认，仅覆盖 `POST /v1/systemone` 与 `noul`、`choice`、`score` 三种 typed question。若供应商调整接口，应以官方文档为准重新核对，不应从示例推断为稳定契约。
 
-后续按开发顺序推进：受限 Runner、trace 持久化、`apps/api`、Web trace dashboard、eval 与对比指标。`apps/api`、`apps/web`、`evals/` 目前为空目录。
+后续按开发顺序推进：`apps/api` 的 HTTP 边界、Web trace dashboard、eval 与对比指标。`apps/web/`、`evals/` 目前为空目录。

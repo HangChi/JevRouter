@@ -17,7 +17,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `jev_router/verifier.py` | 判断结果是否满足目标，并给出完成概率与结果质量评估 |
 | `jev_router/tools/base.py` | 工具输入、输出、风险等级和执行协议 |
 | `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
-| `apps/api/` | HTTP 边界、配置、存储和核心服务装配 |
+| `apps/api/` | HTTP 边界、配置、SQLite trace 存储和核心服务装配 |
 | `apps/web/` | 发起任务、确认待办、查看运行 trace |
 | `evals/` | 固定数据集、基线运行和指标计算 |
 
@@ -41,7 +41,9 @@ MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, 
 
 ## 状态和持久化
 
-核心状态至少应表达 task id、goal、status、step、context、available tools、history、last result 和调用预算。持久化实体可从 `tasks`、`agent_steps`、`evaluations` 开始；SQLite 是 MVP 默认方案。序列化格式需要版本化，避免未来 schema 变更使旧 trace 无法读取。
+核心状态至少应表达 task id、goal、status、step、context、available tools、history、last result 和调用预算。持久化实体从 `tasks`、`agent_steps`、`evaluations` 开始，实现在 `apps/api/storage.py`；SQLite 是 MVP 默认方案。序列化格式分两层版本化——schema 版本走 `PRAGMA user_version`，每个 JSON 载荷自带版本信封——避免未来 schema 变更使旧 trace 无法读取，或更糟地被静默误读。两者都不自动迁移，遇到不认识的版本直接拒绝。
+
+`TaskState` 本身仍不含 task id 和 status：这两项由 Runner 的 `RunResult` 承载，持久化时落到 `tasks` 行。核心包不依赖任何数据库实现。
 
 ## 非目标
 
