@@ -30,9 +30,10 @@ Core task state and execution budgets are immutable snapshots. State advancement
 1. 校验并规范化用户目标及可用工具集合。
 2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；候选工具只来自可信注册配置，模型名从服务能力发现或配置中获取，不永久硬编码。
 3. Policy Engine revalidates that a recommended tool action is currently registered, then applies explicit confidence, risk, confirmation, and reasoning thresholds to select a control outcome. `execute` is not a tool call; any required explicit user approval must be obtained separately by the caller.
-4. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
-5. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
-6. 每一步写入 trace，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟。
+4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供，核心包不内置 LLM 适配器。
+5. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
+6. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
+7. 每一步产生一条 `StepTrace`，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟；Runner 在内存中产出，持久化由后续阶段负责。
 
 MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, `needs_reasoning > 0.70`, and route confidence `< 0.75`, in that precedence. They are initial project values, not TypeSafe recommendations, and should later be calibrated against evals. Unknown or no-longer-registered actions fail closed with `reject`.
 

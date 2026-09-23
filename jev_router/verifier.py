@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +11,7 @@ from jev_router.clients.jev import (
     ScoreAnswer,
     ScoreQuestion,
 )
+from jev_router.serialization import jsonable
 from jev_router.state import TaskState
 
 QUALITY_LEVELS: tuple[str, ...] = (
@@ -23,16 +23,6 @@ QUALITY_LEVELS: tuple[str, ...] = (
 
 _COMPLETION_QUESTION = "task_complete"
 _QUALITY_QUESTION = "result_quality"
-
-
-def _jsonable(value: Any) -> Any:
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    raise ValueError("state values must be JSON-compatible")
 
 
 @dataclass(frozen=True)
@@ -89,13 +79,13 @@ class Verifier:
             "goal": state.goal,
             "step": state.step,
             "action": latest.action,
-            "result": _jsonable(state.last_result),
-            "context": _jsonable(state.context),
+            "result": jsonable(state.last_result),
+            "context": jsonable(state.context),
             "history": [
                 {
                     "step": record.step,
                     "action": record.action,
-                    "result": _jsonable(record.result),
+                    "result": jsonable(record.result),
                 }
                 for record in state.history
             ],

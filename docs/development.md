@@ -2,7 +2,9 @@
 
 ## 项目状态
 
-第一阶段建立了 `jev_router.clients.jev` 中的异步 TypeSafe Jev client，仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question。调用方显式提供 model identifier；模型发现不属于本阶段范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
+已完成六个阶段：Jev client（`jev_router.clients.jev`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；调用方显式提供 model identifier，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
+
+受限 Runner、trace 持久化、API 与 Web 仪表盘尚未实现；`apps/api`、`apps/web`、`evals/` 目前为空目录。
 
 ## 安装与检查
 
@@ -40,6 +42,20 @@ uv run pytest
 请求 state 由 `TaskState` 的 goal、step、最近 action、`last_result`、context 和 history 组成。由于状态快照使用 `MappingProxyType` 和 `tuple`，而 `json.dumps` 无法序列化 `mappingproxy`，verifier 会先把快照转成纯 JSON 结构，否则会在 client 预检处变成 `RequestValidationError`。没有已完成步骤或 `last_result` 为 `None` 时，在发起请求前抛 `ValueError`。
 
 verifier 只做评估：不设完成阈值、不修改状态、不执行工具、不循环，也不代替 Runner 决定结束或继续路由。
+
+## Runner
+
+`jev_router.Runner` 把 Router、PolicyEngine 和 Verifier 接成一个有界循环，并在内部用同一个 `ToolRegistry` 装配三者——这样执行前的注册复检不会因为调用方传入不同的 registry 实例而被绕过。`run(goal)` 返回不可变的 `RunResult`，含终止状态 `RunStatus`、最终 `TaskState`、剩余预算、`StepTrace` 序列和诊断信息。
+
+一次迭代消耗 1 个 step 和 1 次 route 模型调用；execute 路径再加 1 次 verify 调用，delegate 路径再加 1 次。循环顶部同时检查两个计数器再消费，避免"先吃掉一个 step 才报告耗尽"。构造时要求 `max_model_calls >= 2 * max_steps`，否则一次可完成的迭代也会被误报成 `budget_exhausted`。
+
+完成阈值由 Runner 持有（默认 0.75，与 Policy Engine 的 MVP 阈值一致），验证不通过就带着前进后的 state 重新路由。若同一个未变化的 state 第二次被判为未完成，直接以 `failed` 停止并留下诊断，而不是把同样的 payload 反复发给 provider 直到预算耗尽。
+
+四个协作者通过 Protocol 注入，缺省全部 fail closed：`ActionInputResolver`（缺省 `{}`，由工具自身 schema 拒绝）、`ConfirmationHandler`（缺省 `needs_confirmation`）、`UserInputHandler`（缺省 `needs_user_input`）、`DelegateHandler`（缺省 `failed`）。`ActionInputResolver` 是参数合成的接缝——`RouteDecision` 只给动作名不给参数，而参数合成属于 LLM 职责，本阶段不实现 `clients/llm.py`。
+
+确认发生在参数合成**之后**：handler 收到的是即将执行的那份参数，而不是只有一个动作名。`tool.risk` 为 `write` 或 `external` 时，即使策略结论是 `execute` 也强制确认——这一条是 Policy Engine 阶段明确推迟到 Runner 的欠账，只信 Jev 概率会让 mock email 和 write_file 在低概率下被自动执行。
+
+provider 报错、工具拒绝输入、resolver 返回非 Mapping、`TaskState.advance` 拒绝结果，统统收敛为 `failed` 加诊断，不会有异常逃出 `run()`。`TraceSink.emit` 抛出的异常不会中断运行，因为 trace 已经记录在 `RunResult.traces` 里，丢失的只是实时投递。
 
 ## 依赖方向
 
