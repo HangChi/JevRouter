@@ -25,6 +25,8 @@ Core task state and execution budgets are immutable snapshots. State advancement
 
 核心包不应依赖 FastAPI 或前端框架。服务适配器负责将供应商响应转换为内部模型，避免供应商字段渗入 policy 和 runner。
 
+`apps/web/` 只依赖 `apps/api` 的 HTTP 契约，并且所有 API 调用都发生在 Next.js 服务端：server component 负责读，server action 负责写，浏览器只与 Next.js 服务器同源通信。这样 `apps/api` 不需要为浏览器开 CORS，凭证也不可能进入前端代码或响应体。实时刷新用轮询而不是流式，因为 API 没有流式端点；轮询在 run 到达终态时停止。
+
 ## 决策边界
 
 1. 校验并规范化用户目标及可用工具集合。

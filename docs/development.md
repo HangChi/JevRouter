@@ -4,7 +4,7 @@
 
 已完成六个阶段：Jev client（`jev_router.clients.jev`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；调用方显式提供 model identifier，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
-受限 Runner、trace 持久化与 API HTTP 边界已完成；Web 仪表盘与 eval 尚未实现，`apps/web/`、`evals/` 仍为空目录。
+受限 Runner、trace 持久化、API HTTP 边界与 Web trace 仪表盘均已完成；eval 尚未实现，`evals/` 仍为空目录。
 
 ## 安装与检查
 
@@ -13,6 +13,17 @@ uv sync --all-groups
 uv run ruff check .
 uv run mypy jev_router apps
 uv run pytest
+```
+
+Web 层（`apps/web/`）用自己的工具链：
+
+```sh
+cd apps/web
+npm install
+npx tsc --noEmit
+npm run test      # vitest，视图模型与 API 客户端
+npm run lint
+npm run build
 ```
 
 测试使用 HTTPX mock transport，不访问网络、不需要真实凭证，也不产生 billable requests。存储测试使用临时数据库文件。
@@ -85,6 +96,16 @@ run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输�
 
 `default_registry` 只注册 calculator、write_file 和 send_mock_email；两个搜索工具需要调用方注入文档，不放进默认集合。store 只在 app 自己创建时才由 lifespan 关闭，注入的 store 归调用方所有。
 
+## Web 层
+
+`apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的六个端点。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
+
+`src/lib/types.ts` 是 `apps/api/schemas.py` 的手写镜像，不是生成的客户端：API 是唯一事实来源，字段变更必须同步。`src/lib/thresholds.ts` 是 `jev_router/policy.py` 阈值的展示用副本，只用来画刻度线——仪表盘报告的结论永远是 API 返回的 `policy_outcome`，所以阈值副本即使漂移也不会改变结论，只会让刻度线失真；它们集中在一个模块里，就是为了让这种漂移只有一处可修。
+
+`src/lib/viewModel.ts` 是纯函数层：状态色调、步骤分支、概率表、分数读数、验证读数和决策链都在这里决定，组件只负责排版和着色。三个 `noul` 概率按 0–1 画成带阈值刻度的 meter；`route_risk` 和 `quality_score` 是核心包不做归一化的 provider score，因此只显示原始数值加有序色阶，并标注刻度范围（`scale 0–4`、`scale 0–3`），绝不画成 0–1 概率条。缺失字段渲染成「—」而不是 0：`NULL` 和真实的 `0.0` 是两件事。
+
+实时刷新由 `<LiveRefresh>` 完成：run 处于存活状态时每 2 秒 `router.refresh()` 一次，到达终态后自动停止。待确认和待输入由 server action 应答，`409` 说明 run 在渲染和点击之间已经继续前进，此时把 API 的原话显示出来，而不是假装应答成功。
+
 ## 依赖方向
 
 ```text
@@ -102,6 +123,7 @@ apps/web -> apps/api HTTP contract
 - 集成测试：使用 stub HTTP client 验证 Jev request/response 映射和失败处理，不要求真实 API key。
 - 存储测试：临时 SQLite 文件验证 trace 往返、增量写入、版本化载荷、脱敏与降级。
 - API 测试：请求 schema、错误状态码、确认流程及 trace 输出。
+- Web 测试：vitest 覆盖视图模型与 API 客户端（注入 fetch），加上 `tsc --noEmit` 与 `next build`。
 - Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。
 
 对概率策略至少覆盖阈值等于边界、字段缺失、无效概率和候选工具不可用等情况。真实服务 smoke test 应独立、显式启用，避免普通测试产生费用或副作用。

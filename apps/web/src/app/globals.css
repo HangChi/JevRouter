@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-page: #f9f9f7;
+  --color-surface: #fcfcfb;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-muted: #898781;
+  --color-hairline: #e1e0d9;
+  --color-rule: #c3c2b7;
+  --color-accent: #2a78d6;
+  --color-accent-strong: #1c5cab;
+  --color-accent-track: #cde2fb;
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-critical: #d03b3b;
+  --color-level-1: #86b6ef;
+  --color-level-2: #5598e7;
+  --color-level-3: #2a78d6;
+  --color-level-4: #1c5cab;
+  --color-level-5: #104281;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #0d0d0d;
+    --color-surface: #1a1a19;
+    --color-ink: #ffffff;
+    --color-ink-2: #c3c2b7;
+    --color-muted: #898781;
+    --color-hairline: #2c2c2a;
+    --color-rule: #383835;
+    --color-accent: #3987e5;
+    --color-accent-strong: #256abf;
+    --color-accent-track: #0d366b;
+    --color-good: #0ca30c;
+    --color-warning: #fab219;
+    --color-critical: #d03b3b;
+    --color-level-1: #184f95;
+    --color-level-2: #256abf;
+    --color-level-3: #3987e5;
+    --color-level-4: #6da7ec;
+    --color-level-5: #9ec5f4;
+  }
+}
