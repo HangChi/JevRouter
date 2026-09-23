@@ -19,6 +19,10 @@ uv run pytest
 
 `jev_router.tools` 提供可信应用代码配置的 `ToolRegistry` 和五个离线 MVP 工具：calculator、knowledge_search、web_search mock、write_file、send_mock_email mock。工具通过同步 `execute(input)` 接口返回 `ToolResult` 并声明 `read`、`write` 或 `external` 风险；该注册表只负责白名单注册、查找和调用，不包含路由或策略授权。搜索数据由调用方注入，邮件只生成模拟结果，均不访问网络。`WriteFileTool` 必须配置根目录，默认拒绝覆盖。
 
+## Router
+
+`jev_router.Router` 基于调用方提供的任务状态、模型标识和 `ToolRegistry`，一次性请求下一动作、风险、确认需求及推理需求，并返回 `RouteDecision`。动作候选由注册工具和 `ask_user`、`delegate_to_llm`、`finish` 组成。Router 仅提供建议，不授权、不执行工具；授权阈值和执行循环属于后续 Policy/Runner 阶段。
+
 
 从进程环境读取 `JEV_API_KEY`；可选配置 `JEV_BASE_URL` 和有限的 `JEV_TIMEOUT_SECONDS`。`JevClientConfig.from_env()` 不会自动加载 `.env` 文件；需要使用 `.env` 时，由启动工具或调用方先将变量载入进程环境。仓库 `.env.example` 仅列变量名和占位值；真实密钥不得提交、记录到日志或放入前端。若密钥曾在对话或其他公开位置暴露，应先轮换再使用。
 
