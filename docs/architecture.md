@@ -1,0 +1,43 @@
+# 架构与模块边界
+
+## 目标
+
+JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并把判断结果、概率与任务状态交给本地策略代码。LLM 负责自然语言理解、复杂任务拆解和内容生成；常规业务流程、状态变更、预算控制和副作用由应用代码负责。
+
+## 建议模块
+
+| 路径 | 职责 |
+| --- | --- |
+| `jev_router/state.py` | 任务状态、预算、步骤和结果的数据模型 |
+| `jev_router/clients/jev.py` | Jev HTTP/API 适配，隔离供应商 schema |
+| `jev_router/clients/llm.py` | LLM 规范化、推理委托和内容生成适配 |
+| `jev_router/router.py` | 构建路由判断输入并解析 typed decision |
+| `jev_router/policy.py` | 将置信度、风险与确认要求映射到允许的控制动作 |
+| `jev_router/runner.py` | 有预算上限的 route/execute/verify 状态循环 |
+| `jev_router/verifier.py` | 判断结果是否满足目标，以及下一步控制动作 |
+| `jev_router/tools/base.py` | 工具输入、输出、风险等级和执行协议 |
+| `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
+| `apps/api/` | HTTP 边界、配置、存储和核心服务装配 |
+| `apps/web/` | 发起任务、确认待办、查看运行 trace |
+| `evals/` | 固定数据集、基线运行和指标计算 |
+
+核心包不应依赖 FastAPI 或前端框架。服务适配器负责将供应商响应转换为内部模型，避免供应商字段渗入 policy 和 runner。
+
+## 决策边界
+
+1. 校验并规范化用户目标及可用工具集合。
+2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；模型名从服务能力发现或配置中获取，不永久硬编码。
+3. Policy Engine 校验候选动作确实可用，并使用显式配置阈值决定执行、确认、委托或结束。
+4. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
+5. verifier 决定任务是否完成；未完成时受预算约束地返回循环。
+6. 每一步写入 trace，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟。
+
+模型提供建议而非授权。`finish`、`ask_user` 和 `delegate_to_llm` 必须作为受控分支处理，不能被当作工具名无条件执行。
+
+## 状态和持久化
+
+核心状态至少应表达 task id、goal、status、step、context、available tools、history、last result 和调用预算。持久化实体可从 `tasks`、`agent_steps`、`evaluations` 开始；SQLite 是 MVP 默认方案。序列化格式需要版本化，避免未来 schema 变更使旧 trace 无法读取。
+
+## 非目标
+
+MVP 不引入 LangChain/LangGraph、不执行任意 shell 命令、不接真实邮件服务，也不承诺多租户生产级隔离。真实外部集成应单独设计授权、审计、重试和幂等策略。

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jev-router"
+version = "0.1.0"
+description = "Typed Jev decision client and agent routing foundation"
+requires-python = ">=3.9"
+dependencies = [
+  "httpx>=0.27,<1",
+  "pydantic>=2.8,<3",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.11,<2",
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.24,<2",
+  "ruff>=0.6,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["jev_router"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
