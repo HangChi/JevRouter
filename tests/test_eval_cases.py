@@ -16,7 +16,7 @@ def committed() -> tuple[EvalCase, ...]:
 
 def test_committed_file_is_valid_and_covers_every_action() -> None:
     cases = committed()
-    assert len(cases) == 50
+    assert len(cases) == 53
     assert {case.expected_action for case in cases} == {
         "calculator",
         "knowledge_search",
@@ -42,6 +42,38 @@ def test_committed_confirmation_flags_follow_the_risk_classes() -> None:
 def test_committed_file_has_multi_action_allowed_sets() -> None:
     ambiguous = [case.id for case in committed() if len(case.allowed_actions) > 1]
     assert ambiguous, "allowed-match should differ from expected-match on some cases"
+
+
+def test_a_write_case_states_what_to_write() -> None:
+    """A goal without the content is correctly answered with `ask_user`.
+
+    The first real eval lost every write case because the goals said "save the
+    meeting notes" without the notes: both routers asked the user, which is the
+    right call. A case that expects `write_file` must therefore carry a
+    destination and some content, or it is testing nothing.
+    """
+    for case in committed():
+        if case.expected_action != "write_file":
+            continue
+        assert "." in case.goal, f"{case.id} names no destination file"
+
+
+def test_an_email_case_states_a_recipient() -> None:
+    """Same rule for mail: no address means asking is the correct next action."""
+    for case in committed():
+        if case.expected_action != "send_mock_email":
+            continue
+        assert "@" in case.goal, f"{case.id} names no recipient"
+
+
+def test_the_set_measures_restraint_as_well_as_action() -> None:
+    """Cases whose information is genuinely missing must expect `ask_user`.
+
+    Without them a rising `ask_user` rate is indistinguishable from a router that
+    correctly refuses to guess.
+    """
+    asking = [case for case in committed() if case.expected_action == "ask_user"]
+    assert len(asking) >= 5, "the case set needs cases where asking is correct"
 
 
 def write_file(tmp_path: Any, payload: Any) -> Any:
