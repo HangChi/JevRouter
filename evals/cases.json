@@ -1,0 +1,364 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "calc-001",
+      "goal": "2 的 10 次方是多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-002",
+      "goal": "公司差旅标准是每天 500 元，出差 3 天一共能报销多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator", "knowledge_search"],
+      "requires_confirmation": false,
+      "notes": "标准已在目标里给出，剩下的是算术。"
+    },
+    {
+      "id": "calc-003",
+      "goal": "帮我把 (12.5 * 8) / 4 算出来",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-004",
+      "goal": "如果每天存 25 元，365 天一共存多少钱？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-005",
+      "goal": "边长 7 的正方形面积是多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-006",
+      "goal": "99 乘以 99 等于多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-007",
+      "goal": "3/8 转换成小数是多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "calc-008",
+      "goal": "一个数的三分之一是 17，这个数是多少？",
+      "expected_action": "calculator",
+      "allowed_actions": ["calculator"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-001",
+      "goal": "查一下我们的差旅报销标准，然后算出 3 天能报多少。",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search", "calculator"],
+      "requires_confirmation": false,
+      "notes": "标准未给出，先查内部文档。"
+    },
+    {
+      "id": "know-002",
+      "goal": "API 的速率限制是多少？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-003",
+      "goal": "新员工 onboarding 有哪几步？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-004",
+      "goal": "企业版的内部定价是多少？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-005",
+      "goal": "退款政策具体怎么规定的？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-006",
+      "goal": "数据库多久备份一次？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-007",
+      "goal": "SLA 承诺的可用性是多少？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "know-008",
+      "goal": "员工一年有几天年假？",
+      "expected_action": "knowledge_search",
+      "allowed_actions": ["knowledge_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-001",
+      "goal": "查一下东京明天天气，然后发邮件告诉 Alice。",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search", "knowledge_search", "send_mock_email"],
+      "requires_confirmation": false,
+      "notes": "第一步是获取外部当前信息，邮件是后面的步骤。"
+    },
+    {
+      "id": "web-002",
+      "goal": "Python 最新稳定版有什么变化？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-003",
+      "goal": "现在美元对人民币的汇率是多少？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-004",
+      "goal": "2026 年世界杯决赛是什么时候？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-005",
+      "goal": "今天纳斯达克收盘是多少点？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-006",
+      "goal": "最近有什么关于 AI 监管的新闻？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-007",
+      "goal": "最新一代 iPhone 什么时候发布的？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-008",
+      "goal": "特斯拉现在的股价是多少？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-009",
+      "goal": "这周有哪些科技发布会？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "web-010",
+      "goal": "现在比特币价格是多少？",
+      "expected_action": "web_search",
+      "allowed_actions": ["web_search"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "write-001",
+      "goal": "把东京明天的天气写进 weather.txt",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-002",
+      "goal": "把今天的会议要点保存到 notes.md",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-003",
+      "goal": "生成一份本月总结并写入 report.md",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-004",
+      "goal": "把待办清单写进 todo.txt",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-005",
+      "goal": "把配置模板写到 config.json",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-006",
+      "goal": "把这次变更记录写进 changelog.md",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-007",
+      "goal": "把五个要点总结后写入 summary.md",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-008",
+      "goal": "把购物清单存到 shopping.txt",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "write-009",
+      "goal": "把测试结果写进 results.txt",
+      "expected_action": "write_file",
+      "allowed_actions": ["write_file"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-001",
+      "goal": "发邮件告诉 Alice 东京明天的天气",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-002",
+      "goal": "把周报发给我的经理",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-003",
+      "goal": "提醒团队明天的 standup 改到十点",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-004",
+      "goal": "把报告发给 bob@example.com",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-005",
+      "goal": "通知 on-call 服务已经恢复",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-006",
+      "goal": "给客户发送本月发票",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-007",
+      "goal": "把会议纪要邮件发给所有参会者",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "email-008",
+      "goal": "给 Carol 发生日祝福",
+      "expected_action": "send_mock_email",
+      "allowed_actions": ["send_mock_email"],
+      "requires_confirmation": true
+    },
+    {
+      "id": "ask-001",
+      "goal": "帮我处理一下那个文件",
+      "expected_action": "ask_user",
+      "allowed_actions": ["ask_user"],
+      "requires_confirmation": false,
+      "notes": "没有指明文件，正确动作是追问。"
+    },
+    {
+      "id": "ask-002",
+      "goal": "给那边发个消息说一下",
+      "expected_action": "ask_user",
+      "allowed_actions": ["ask_user"],
+      "requires_confirmation": false,
+      "notes": "收件人和内容都缺失。"
+    },
+    {
+      "id": "ask-003",
+      "goal": "看看那个东西怎么了",
+      "expected_action": "ask_user",
+      "allowed_actions": ["ask_user"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "delegate-001",
+      "goal": "设计一个缓存策略并说明取舍",
+      "expected_action": "delegate_to_llm",
+      "allowed_actions": ["delegate_to_llm"],
+      "requires_confirmation": false,
+      "notes": "需要开放式推理，不是候选动作能直接完成的。"
+    },
+    {
+      "id": "delegate-002",
+      "goal": "规划数据库迁移方案并评估风险",
+      "expected_action": "delegate_to_llm",
+      "allowed_actions": ["delegate_to_llm"],
+      "requires_confirmation": false
+    },
+    {
+      "id": "finish-001",
+      "goal": "如果 notes.md 已经写好了就结束任务",
+      "expected_action": "finish",
+      "allowed_actions": ["finish"],
+      "requires_confirmation": false,
+      "context": {"notes_md_exists": true},
+      "notes": "上下文表明目标已满足。"
+    },
+    {
+      "id": "finish-002",
+      "goal": "确认任务已经完成",
+      "expected_action": "finish",
+      "allowed_actions": ["finish"],
+      "requires_confirmation": false,
+      "context": {"task_complete": true}
+    }
+  ]
+}

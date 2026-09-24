@@ -49,6 +49,7 @@ def create_app(
     tools: ToolRegistry | None = None,
     resolver: Any = None,
     client: Any = None,
+    llm_client: Any = None,
 ) -> FastAPI:
     resolved = settings or Settings.from_env()
     owns_store = store is None
@@ -60,6 +61,7 @@ def create_app(
         tools=tools if tools is not None else default_registry(resolved),
         resolver=resolver,
         client=client,
+        llm_client=llm_client,
     )
 
     @asynccontextmanager

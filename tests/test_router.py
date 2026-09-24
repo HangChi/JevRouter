@@ -89,6 +89,8 @@ async def test_router_sends_one_request_and_returns_typed_decision() -> None:
         requires_confirmation=0.8,
         needs_reasoning=0.3,
         model="test-model",
+        input_tokens=20,
+        output_tokens=8,
     )
     assert not tool.executed
 

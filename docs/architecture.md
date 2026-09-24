@@ -10,7 +10,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | --- | --- |
 | `jev_router/state.py` | Immutable task snapshots, step history, and finite execution budgets |
 | `jev_router/clients/jev.py` | Jev HTTP/API 适配，隔离供应商 schema |
-| `jev_router/clients/llm.py` | LLM 规范化、推理委托和内容生成适配 |
+| `jev_router/clients/llm.py` | LLM 规范化、推理委托和内容生成适配（Anthropic Messages API） |
 | `jev_router/router.py` | 构建路由判断输入并解析 typed decision |
 | `jev_router/policy.py` | 将置信度、风险与确认要求映射到允许的控制动作 |
 | `jev_router/runner.py` | 有预算上限的 route/execute/verify 状态循环 |
@@ -19,7 +19,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
 | `apps/api/` | HTTP 边界、配置、SQLite trace 存储和核心服务装配 |
 | `apps/web/` | 发起任务、确认待办、查看运行 trace |
-| `evals/` | 固定数据集、基线运行和指标计算 |
+| `evals/` | 固定数据集、LLM 基线路由、运行器和指标计算 |
 
 Core task state and execution budgets are immutable snapshots. State advancement records each completed action/result; budget consumption decrements a finite step or model-call allowance and rejects exhausted limits. The later Runner owns when to consume these budgets and how to stop. Persistence and serialization are outside the state contract.
 
@@ -32,12 +32,15 @@ Core task state and execution budgets are immutable snapshots. State advancement
 1. 校验并规范化用户目标及可用工具集合。
 2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；候选工具只来自可信注册配置，模型名从服务能力发现或配置中获取，不永久硬编码。
 3. Policy Engine revalidates that a recommended tool action is currently registered, then applies explicit confidence, risk, confirmation, and reasoning thresholds to select a control outcome. `execute` is not a tool call; any required explicit user approval must be obtained separately by the caller.
-4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供，核心包不内置 LLM 适配器。
+4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供；`delegate_to_llm` 分支同理，只有服务端显式配置了 LLM（`LLM_API_KEY` + `LLM_MODEL`）时才装配委托 handler，否则 fail closed。
 5. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
 6. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
 7. 每一步产生一条 `StepTrace`，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟；Runner 在内存中产出，持久化由后续阶段负责。
+8. eval 用固定用例重放同一套 Router/PolicyEngine，并用候选集完全一致的 LLM 基线路由做对比；它只测量，不改变被测量的对象，也不改阈值。
 
 MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, `needs_reasoning > 0.70`, and route confidence `< 0.75`, in that precedence. They are initial project values, not TypeSafe recommendations, and should later be calibrated against evals. Unknown or no-longer-registered actions fail closed with `reject`.
+
+`evals/` 的用例、基线路由和指标都只依赖 `jev_router` 公开接口；LLM 基线与 Jev 看到同一份 goal/history 和同一份候选集，但它不产生概率，因此对比表里它的置信度一栏必须留空而不是填 0。eval 运行是显式的 CLI 动作，测试不会触发真实 provider 调用。
 
 模型提供建议而非授权。`finish`、`ask_user` 和 `delegate_to_llm` 必须作为受控分支处理，不能被当作工具名无条件执行。Policy Engine 只返回控制结果，不调用工具，也不代替用户确认。
 

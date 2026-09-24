@@ -2,16 +2,14 @@
 
 ## 项目状态
 
-已完成六个阶段：Jev client（`jev_router.clients.jev`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；调用方显式提供 model identifier，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
-
-受限 Runner、trace 持久化、API HTTP 边界与 Web trace 仪表盘均已完成；eval 尚未实现，`evals/` 仍为空目录。
+Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘和 eval 运行器均已完成；eval 结果的持久化与对比仪表盘尚未实现。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
 ## 安装与检查
 
 ```sh
 uv sync --all-groups
 uv run ruff check .
-uv run mypy jev_router apps
+uv run mypy jev_router apps evals
 uv run pytest
 ```
 
@@ -53,6 +51,12 @@ npm run build
 请求 state 由 `TaskState` 的 goal、step、最近 action、`last_result`、context 和 history 组成。由于状态快照使用 `MappingProxyType` 和 `tuple`，而 `json.dumps` 无法序列化 `mappingproxy`，verifier 会先把快照转成纯 JSON 结构，否则会在 client 预检处变成 `RequestValidationError`。没有已完成步骤或 `last_result` 为 `None` 时，在发起请求前抛 `ValueError`。
 
 verifier 只做评估：不设完成阈值、不修改状态、不执行工具、不循环，也不代替 Runner 决定结束或继续路由。
+
+## LLM Client
+
+`jev_router/clients/llm.py` 是与 `clients/jev.py` 对等的 LLM 适配器：冻结的 `LLMClientConfig`（key、base URL、超时、max tokens、API 版本）在构造时校验并提供 `from_env`，`LLMClient.complete(model=..., system=..., prompt=...)` 通过可注入的 httpx transport 发一次 Anthropic Messages API 请求，返回 `LLMCompletion`（text、model、input/output tokens）。错误分类与 Jev client 一致（`configuration`/`request_validation`/`transport`/`http`/`response_decoding`/`response_validation`），调用方按 `category` 处理，不解析供应商错误体。
+
+核心包不自行调用 LLM：适配器存在的意义是让 API 的委托分支和 eval 的基线路由共用同一个经过测试的客户端。`RouteDecision` 带有可选的 `input_tokens`/`output_tokens`，来自响应的 `usage`，因为对比指标需要它；缺失时为 `None` 而不是 0。
 
 ## Runner
 
@@ -96,6 +100,8 @@ run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输�
 
 `default_registry` 只注册 calculator、write_file 和 send_mock_email；两个搜索工具需要调用方注入文档，不放进默认集合。store 只在 app 自己创建时才由 lifespan 关闭，注入的 store 归调用方所有。
 
+LLM 委托是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配置（`LLM_API_KEY` + `LLM_MODEL`），要么同时缺省；只设其一在启动时报错。配置了才构造 `_LLMDelegate`，把 LLM 生成的推理文本作为 `delegate_to_llm` 步骤的结果交给 Runner 记录，下一步路由因此能在 history 里看到它。没有配置时保持第七阶段原始的 fail closed 行为：run 以 `failed` 停止并留下 "delegation was requested but no handler is configured" 诊断。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run——委托静默返回空比失败更糟。
+
 ## Web 层
 
 `apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的六个端点。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
@@ -105,6 +111,14 @@ run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输�
 `src/lib/viewModel.ts` 是纯函数层：状态色调、步骤分支、概率表、分数读数、验证读数和决策链都在这里决定，组件只负责排版和着色。三个 `noul` 概率按 0–1 画成带阈值刻度的 meter；`route_risk` 和 `quality_score` 是核心包不做归一化的 provider score，因此只显示原始数值加有序色阶，并标注刻度范围（`scale 0–4`、`scale 0–3`），绝不画成 0–1 概率条。缺失字段渲染成「—」而不是 0：`NULL` 和真实的 `0.0` 是两件事。
 
 实时刷新由 `<LiveRefresh>` 完成：run 处于存活状态时每 2 秒 `router.refresh()` 一次，到达终态后自动停止。待确认和待输入由 server action 应答，`409` 说明 run 在渲染和点击之间已经继续前进，此时把 API 的原话显示出来，而不是假装应答成功。
+
+## Eval
+
+`evals/` 只依赖 `jev_router` 的公开接口（`evals/cli.py` 除外，它是唯一跨层模块，用 `apps.api.schemas` 的模型向运行中的 API 投递报告）。五个模块各司其职：`cases.py`（严格 `EvalCase` 模型与版本化 loader）、`cases.json`（50 条固定用例，覆盖五个工具和三个控制动作）、`registry.py`（带固定 fixture 的五工具注册表，保证可复现且离线）、`llm_router.py`（LLM 基线路由，候选集与 `jev_router.Router` 完全一致，要求严格 JSON 输出）、`runner.py`（逐用例路由一次、过一遍真实 PolicyEngine、产出 `CaseOutcome`）、`metrics.py`（纯聚合）、`report.py`（版本化报告序列化）。
+
+`CaseOutcome.succeeded` 比"动作可接受"更严：还要求策略的确认结论与用例的 `requires_confirmation` 一致——这正是阈值校准需要的信号。`requires_confirmation` 只对 `write`/`external` 风险工具为真，与 Runner 执行时的强制确认同一条规则，因此该指标衡量的是 Policy Engine 能否自己得出这个结论。延迟百分位用最近秩法（50 个样本的 p95 是排序后第 48 个值），token 统计只覆盖有用例回数的场景。
+
+CLI：`uv run python -m evals --mode jev|llm|compare [--limit N] [--json-out PATH]`。凭证全部来自环境变量，缺任何一个都在跑用例之前失败；有用例出错时退出码为 1，配置或用例文件问题为 2，干净运行为 0。评测是显式动作，测试绝不触发真实 provider 调用。
 
 ## 依赖方向
 
@@ -120,11 +134,11 @@ apps/web -> apps/api HTTP contract
 ## 测试层次
 
 - 单元测试：状态转换、策略阈值边界、工具输入校验、预算耗尽。
-- 集成测试：使用 stub HTTP client 验证 Jev request/response 映射和失败处理，不要求真实 API key。
+- 集成测试：使用 stub HTTP client 验证 Jev/LLM request/response 映射和失败处理，不要求真实 API key。
 - 存储测试：临时 SQLite 文件验证 trace 往返、增量写入、版本化载荷、脱敏与降级。
-- API 测试：请求 schema、错误状态码、确认流程及 trace 输出。
+- API 测试：请求 schema、错误状态码、确认流程、LLM 委托装配及 trace 输出。
 - Web 测试：vitest 覆盖视图模型与 API 客户端（注入 fetch），加上 `tsc --noEmit` 与 `next build`。
-- Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。
+- Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。用例集本身由测试校验，loader 规则与提交的 `cases.json` 不会悄悄漂移。
 
 对概率策略至少覆盖阈值等于边界、字段缺失、无效概率和候选工具不可用等情况。真实服务 smoke test 应独立、显式启用，避免普通测试产生费用或副作用。
 

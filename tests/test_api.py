@@ -19,6 +19,7 @@ from apps.api.app import create_app, default_registry
 from apps.api.config import Settings
 from apps.api.storage import TraceStore
 from jev_router.clients.jev import JevClient, JevClientConfig
+from jev_router.clients.llm import LLMClientConfig, LLMCompletion, LLMHttpError
 from jev_router.tools import CalculatorTool, ToolRegistry, WriteFileTool
 
 TERMINAL = frozenset(
@@ -46,6 +47,7 @@ def api(tmp_path: Path):
         *,
         tools: ToolRegistry | None = None,
         resolver: Any = None,
+        llm_client: Any = None,
         **settings: Any,
     ) -> TestClient:
         resolved = Settings(
@@ -63,6 +65,7 @@ def api(tmp_path: Path):
             tools=tools if tools is not None else ToolRegistry([CalculatorTool()]),
             resolver=resolver if resolver is not None else StubResolver(),
             client=JevClient(resolved.jev, fake.transport()),
+            llm_client=llm_client,
         )
         return TestClient(app)
 
@@ -381,3 +384,137 @@ def test_the_default_registry_omits_the_search_tools(tmp_path: Path) -> None:
 
     assert registry.names() == ("calculator", "write_file", "send_mock_email")
     assert registry.get("write_file").risk == "write"
+
+
+class StubLLM:
+    """Stands in for the configured LLM behind delegation."""
+
+    def __init__(self, text: str = "the reasoned answer") -> None:
+        self.text = text
+        self.calls: list[dict[str, Any]] = []
+
+    async def complete(
+        self, *, model: str, system: str, prompt: str, max_tokens: int | None = ...
+    ) -> Any:
+        self.calls.append({"model": model, "system": system, "prompt": prompt})
+        return LLMCompletion(
+            text=self.text, model="stub-llm", input_tokens=120, output_tokens=24
+        )
+
+
+def llm_settings(**overrides: Any) -> dict[str, Any]:
+    values: dict[str, Any] = {
+        "llm_model": "claude-sonnet-4-5",
+        "llm": LLMClientConfig(api_key="llm-test-key"),
+    }
+    values.update(overrides)
+    return values
+
+
+def delegating_route() -> dict[str, Any]:
+    # needs_reasoning above the 0.70 threshold routes to delegation.
+    return route_answers("calculator", needs_reasoning=0.9)
+
+
+def test_settings_leave_the_llm_unconfigured_by_default(tmp_path: Path) -> None:
+    settings = Settings.from_env({"JEV_API_KEY": "k", "JEV_MODEL": "m"})
+
+    assert settings.llm is None
+    assert settings.llm_model is None
+
+
+def test_settings_read_the_llm_environment(tmp_path: Path) -> None:
+    settings = Settings.from_env(
+        {
+            "JEV_API_KEY": "k",
+            "JEV_MODEL": "m",
+            "LLM_API_KEY": "lk",
+            "LLM_MODEL": "claude-sonnet-4-5",
+        }
+    )
+
+    assert settings.llm is not None
+    assert settings.llm_model == "claude-sonnet-4-5"
+
+
+def test_settings_reject_an_llm_model_without_a_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="LLM_API_KEY"):
+        Settings.from_env({"JEV_API_KEY": "k", "JEV_MODEL": "m", "LLM_MODEL": "m2"})
+
+
+def test_settings_reject_an_llm_key_without_a_model(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="LLM_MODEL"):
+        Settings.from_env({"JEV_API_KEY": "k", "JEV_MODEL": "m", "LLM_API_KEY": "lk"})
+
+
+def test_settings_reject_a_half_configured_llm(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="together"):
+        Settings(
+            model=TEST_MODEL,
+            database_path=str(tmp_path / "traces.db"),
+            jev=JevClientConfig(api_key="k"),
+            llm=LLMClientConfig(api_key="lk"),
+        )
+
+
+def test_a_delegating_run_uses_the_configured_llm(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(delegating_route())
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+    llm = StubLLM()
+
+    with api(fake, llm_client=llm, **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+        traces = client.get(f"/tasks/{task_id}/traces").json()["traces"]
+
+    assert body["status"] == "completed"
+    assert body["step"] == 2
+    assert [trace["policy_outcome"] for trace in traces] == ["delegate_to_llm", "execute"]
+    assert traces[0]["action"] == "calculator"
+    assert traces[0]["result"] == "the reasoned answer"
+    assert traces[0]["executed"] is False
+    assert traces[1]["executed"] is True
+    assert llm.calls[0]["model"] == "claude-sonnet-4-5"
+    assert "Calculate 2 + 2" in llm.calls[0]["prompt"]
+
+
+def test_a_delegating_run_fails_closed_without_an_llm(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(delegating_route())
+
+    with api(fake) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert body["diagnostic"] == "delegation was requested but no handler is configured"
+
+
+def test_a_failing_delegation_fails_the_run_with_its_category(api: Any) -> None:
+    class BrokenLLM:
+        async def complete(self, **kwargs: Any) -> Any:
+            raise LLMHttpError(429)
+
+    fake = FakeJev()
+    fake.routes.append(delegating_route())
+
+    with api(fake, llm_client=BrokenLLM(), **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert "http" in (body["diagnostic"] or "")
+
+
+def test_an_empty_delegation_fails_the_run(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(delegating_route())
+
+    with api(fake, llm_client=StubLLM("   "), **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert body["diagnostic"] is not None

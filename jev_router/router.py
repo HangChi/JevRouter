@@ -32,7 +32,7 @@ RISK_LEVELS: tuple[RiskDescription, ...] = (
     "Potentially destructive or irreversible action",
 )
 
-_CONTROL_ACTIONS: dict[str, str] = {
+CONTROL_ACTIONS: dict[str, str] = {
     "ask_user": "More information is required",
     "delegate_to_llm": "The decision requires complex reasoning",
     "finish": "The task is already complete",
@@ -48,6 +48,8 @@ class RouteDecision:
     requires_confirmation: float
     needs_reasoning: float
     model: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class Router:
@@ -62,7 +64,7 @@ class Router:
                 name: self._tools.get(name).description
                 for name in self._tools.names()
             },
-            **_CONTROL_ACTIONS,
+            **CONTROL_ACTIONS,
         }
         questions: dict[str, Question] = {
             "next_action": ChoiceQuestion(
@@ -105,4 +107,6 @@ class Router:
             requires_confirmation=confirmation_answer.noul,
             needs_reasoning=reasoning_answer.noul,
             model=response.model,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
         )

@@ -30,7 +30,9 @@
 
 ## 凭证和日志
 
-API key 仅从服务端环境或受控密钥存储读取。不得提交 `.env`、在前端暴露 key、把 Authorization header 或原始密钥写入 trace。持久化用户目标和工具输入/输出前，应考虑敏感数据最小化、保留期限和访问控制；生产部署前定义删除与脱敏策略。
+API key 仅从服务端环境或受控密钥存储读取。不得提交 `.env`、在前端暴露 key、把 Authorization header 或原始密钥写入 trace。Jev 与 LLM 的凭证遵循同一条规则：`LLM_API_KEY` 只存在于 API 进程，`x-api-key` header 不进 trace，store 的结构性保证同样适用（它只看得到 `RunResult`/`StepTrace`）。持久化用户目标和工具输入/输出前，应考虑敏感数据最小化、保留期限和访问控制；生产部署前定义删除与脱敏策略。
+
+委托给 LLM 的提示词包含用户目标和历史结果，属于既有数据流：这些内容本来就已进入 Jev 请求 state 和 trace，新增的 LLM 调用不扩大暴露面，但 LLM 提供方因此成为另一个需要信任的接收方。
 
 ## 工具实现约束
 

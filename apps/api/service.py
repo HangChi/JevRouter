@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -9,9 +10,18 @@ from apps.api.config import Settings
 from apps.api.schemas import AWAITING_CONFIRMATION, AWAITING_INPUT, RUNNING
 from apps.api.storage import TraceStore
 from jev_router.clients.jev import JevClient
+from jev_router.clients.llm import LLMClient, LLMClientError
 from jev_router.runner import Runner, RunResult, StepTrace
 from jev_router.state import TaskState
 from jev_router.tools.registry import ToolRegistry
+
+_DELEGATE_SYSTEM = (
+    "You are the reasoning delegate of an agent. The router decided that this "
+    "step needs deeper reasoning than a typed decision can provide. Produce the "
+    "answer or the concrete content that advances the task, as plain text."
+)
+
+_RESULT_LIMIT = 500
 
 
 class UnknownTaskError(KeyError):
@@ -40,6 +50,63 @@ class RunHandle:
     diagnostic: str | None = None
     pending_confirmation: PendingConfirmation | None = None
     pending_input: PendingInput | None = None
+
+
+class _LLMDelegate:
+    """Answers a delegation with LLM-generated reasoning.
+
+    The Runner records the returned text as the ``delegate_to_llm`` step result,
+    so the next route sees it in history; nothing is executed here. A provider
+    failure becomes a ``ValueError`` carrying the error category, which the
+    Runner lets escape ``run()`` and the service turns into a failed run — a
+    delegation that silently produced nothing would be worse.
+    """
+
+    def __init__(self, client: LLMClient, model: str) -> None:
+        self._client = client
+        self._model = model
+
+    async def delegate(self, state: TaskState) -> str:
+        try:
+            completion = await self._client.complete(
+                model=self._model,
+                system=_DELEGATE_SYSTEM,
+                prompt=_delegation_prompt(state),
+            )
+        except LLMClientError as exc:
+            raise ValueError(f"delegation failed: {exc.category}") from exc
+        if not completion.text.strip():
+            raise ValueError("the delegate handler returned no result")
+        return completion.text
+
+
+def _delegation_prompt(state: TaskState) -> str:
+    history = state.history
+    if history:
+        rendered = []
+        for record in history:
+            result = _clip(record.result)
+            rendered.append(f"- step {record.step}: {record.action} -> {result}")
+        history_text = "\n".join(rendered)
+    else:
+        history_text = "- (none)"
+    return "\n".join(
+        [
+            f"Goal: {state.goal}",
+            f"Step: {state.step}",
+            f"Context: {_clip(state.context)}",
+            "Completed steps:",
+            history_text,
+            f"Last result: {_clip(state.last_result)}",
+            "",
+            "Produce the content that advances this task.",
+        ]
+    )
+
+
+def _clip(value: Any) -> str:
+    text = json.dumps(value, default=str, sort_keys=True)
+    return text if len(text) <= _RESULT_LIMIT else text[: _RESULT_LIMIT - 3] + "..."
 
 
 class _RunHandlers:
@@ -85,16 +152,29 @@ class TaskService:
         tools: ToolRegistry,
         resolver: Any,
         client: JevClient | None = None,
+        llm_client: LLMClient | None = None,
     ) -> None:
         self._store = store
         self._settings = settings
         self._tools = tools
         self._resolver = resolver
         self._client = client or JevClient(settings.jev)
+        self._delegate = self._build_delegate(llm_client)
         self._handles: dict[str, RunHandle] = {}
         self._confirmations: dict[str, asyncio.Future[bool]] = {}
         self._inputs: dict[str, asyncio.Future[str | None]] = {}
         self._runs: dict[str, asyncio.Task[None]] = {}
+
+    def _build_delegate(self, llm_client: LLMClient | None) -> _LLMDelegate | None:
+        """Assemble the delegate only when an LLM is actually configured.
+
+        Without LLM settings the service stays fail closed exactly as phase 7
+        shipped it: a delegation request stops the run instead of guessing.
+        """
+        if self._settings.llm is None or self._settings.llm_model is None:
+            return None
+        client = llm_client or LLMClient(self._settings.llm)
+        return _LLMDelegate(client, self._settings.llm_model)
 
     def submit(
         self,
@@ -117,6 +197,7 @@ class TaskService:
             resolver=self._resolver,
             confirmation=_RunHandlers(self, identifier),
             user_input=_RunHandlers(self, identifier),
+            delegate=self._delegate,
             trace_sink=self._store.sink(),
         )
         self._runs[identifier] = asyncio.get_running_loop().create_task(
