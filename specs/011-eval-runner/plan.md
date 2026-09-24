@@ -18,7 +18,7 @@ Parsing is defensive because the provider is not guaranteed to obey: the whole t
 
 `EvalCase` is a strict pydantic model (`extra="forbid"`): `id`, `goal`, `expected_action`, `allowed_actions`, `requires_confirmation`, optional `context` and `notes`. The loader reads a versioned envelope `{"version": 1, "cases": [...]}`, refuses an unknown version, and enforces the cross-field rules the schema cannot express: unique ids, non-empty list, `expected_action ∈ allowed_actions`, and trimmed action names.
 
-The committed `cases.json` holds 50 cases across all five tools and the three control actions, with `requires_confirmation` true exactly for the `write`/`external` risk tools — the same rule the Runner enforces at execution time, so the metric measures whether the Policy Engine reaches that conclusion on its own.
+The committed `cases.json` holds 53 cases across all five tools and the three control actions, with `requires_confirmation` true exactly for the `write`/`external` risk tools — the same rule the Runner enforces at execution time, so the metric measures whether the Policy Engine reaches that conclusion on its own.
 
 ### 4. The runner is a pure orchestration over injected routers
 
