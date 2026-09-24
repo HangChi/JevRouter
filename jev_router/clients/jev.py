@@ -9,7 +9,7 @@ from typing import Any, Optional, Union
 from urllib.parse import urljoin
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 JSONValue = Union[None, bool, int, float, str, list[Any], dict[str, Any]]
 QuestionInstructions = Union[str, dict[str, Any], list[Any]]
@@ -48,8 +48,20 @@ class ResponseDecodingError(JevClientError):
 
 
 class ResponseValidationError(JevClientError):
-    def __init__(self) -> None:
-        super().__init__("response_validation", "Jev service response did not match the expected schema")
+    """The answer did not match the question it claims to answer.
+
+    ``reason`` names the check that failed — which question, and what kind of
+    mismatch — because a run that stops here is otherwise undiagnosable. It is
+    structural, never the provider's payload: response bodies stay out of error
+    text per docs/security.md.
+    """
+
+    def __init__(self, reason: str | None = None) -> None:
+        message = "Jev service response did not match the expected schema"
+        if reason:
+            message = f"{message}: {reason}"
+        super().__init__("response_validation", message)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -159,6 +171,33 @@ class ScoreAnswer(AnswerBase):
     probabilities: dict[str, float]
     confidence: float
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legend_shape(cls, data: Any) -> Any:
+        """Accept the provider's index-keyed legend and probabilities.
+
+        A live response carries ``legend`` as ``{"0": "No meaningful side
+        effects", ...}`` and ``probabilities`` keyed by those same indices,
+        while the submitted criteria are the label strings. Normalizing here
+        keeps one shape for every consumer: the legend is an ordered list of
+        labels and the probabilities are keyed by label.
+        """
+        if not isinstance(data, dict) or data.get("type") != "score":
+            return data
+        legend = data.get("legend")
+        probabilities = data.get("probabilities")
+        if not isinstance(legend, dict):
+            return data
+        ordered = sorted(legend.items(), key=lambda item: int(item[0]))
+        normalized = {**data, "legend": [label for _, label in ordered]}
+        if isinstance(probabilities, dict) and probabilities and all(
+            key in legend for key in probabilities
+        ):
+            normalized["probabilities"] = {
+                legend[key]: value for key, value in probabilities.items()
+            }
+        return normalized
+
     @field_validator("score")
     @classmethod
     def validate_score(cls, value: float) -> float:
@@ -240,7 +279,7 @@ class JevClient:
             result = DecisionResponse.model_validate(payload)
             _validate_answers(result, questions)
         except (ValidationError, ValueError, KeyError, TypeError) as exc:
-            raise ResponseValidationError() from exc
+            raise ResponseValidationError(str(exc)) from exc
         return result
 
 
@@ -250,12 +289,21 @@ def _validate_probability(value: float, label: str) -> float:
     return value
 
 
+# The provider rounds each probability to two decimals, so an N-way
+# distribution can legitimately sum to 1 +/- N * 0.005: 0.04 for the eight
+# actions the Router submits. A tolerance tighter than the provider's own
+# precision turns rounding noise into a failed run, which is what a live eval
+# caught. The bound is still tight enough to catch a genuinely broken
+# distribution (a missing candidate, a wrong normalization).
+_DISTRIBUTION_TOLERANCE = 0.05
+
+
 def _validate_distribution(values: Mapping[str, float]) -> None:
     if not values:
         raise ValueError("probability distribution must not be empty")
     if any(not math.isfinite(value) or not 0 <= value <= 1 for value in values.values()):
         raise ValueError("probabilities must be finite and between 0 and 1")
-    if not math.isclose(sum(values.values()), 1.0, rel_tol=1e-3, abs_tol=1e-3):
+    if not math.isclose(sum(values.values()), 1.0, abs_tol=_DISTRIBUTION_TOLERANCE):
         raise ValueError("probabilities must sum to 1")
 
 

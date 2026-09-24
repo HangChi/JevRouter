@@ -2,7 +2,16 @@
 
 ## 项目状态
 
-Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘、eval 运行器，以及 eval 结果的持久化与对比仪表盘均已完成。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
+Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘、eval 运行器，以及 eval 结果的持久化与对比仪表盘均已完成。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。
+
+## 供应商契约（实测，非推断）
+
+第一次真实 eval（`jev-latest`，50 例）纠正了两处 phase 1 依据文档写下的假设，两者都由离线测试放过、由真实响应抓出：
+
+- `score` 答案的 `legend` 是索引字典 `{"0": "No meaningful side effects", ...}`，`probabilities` 也按同样索引键控，而提交的 criteria 是标签文本。客户端在边界归一化成「有序标签列表 + 按标签键控的概率」，消费者只看一种形状；标签键控的旧形状仍然接受。`tests/test_jev_client.py` 用一份真实抓包的响应做夹具，把这个契约钉住。
+- 概率按两位小数四舍五入，8 个候选的合法分布总和可以漂到 1 ± 0.04。原先 1e-3 的容差把舍入噪声当成坏响应——真实运行 50 例里就挂了 1 例。容差改为 0.05，并附理由。`ResponseValidationError` 现在带上「哪个检查失败」，但不带响应体（`docs/security.md` 要求原始响应体不进错误文本）。
+
+LLM client 的 `api_style` 选择 wire format：`messages`（Anthropic，默认）或 `chat_completions`（OpenAI 兼容网关，base URL 需自带版本段，如 `https://api.stepfun.com/step_plan/v1`）。两者产出同一个 `LLMCompletion`，消费者不关心部署用哪种。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
 ## 安装与检查
 

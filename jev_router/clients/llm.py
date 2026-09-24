@@ -5,7 +5,7 @@ import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -54,9 +54,14 @@ class LLMClientConfig:
     """Connection settings for the LLM adapter.
 
     Mirrors ``JevClientConfig``: everything is validated at construction so a
-    misconfigured deployment fails before the first completion is requested. The
-    provider shape is the Anthropic Messages API; a different gateway is a base
-    URL change, a different provider is a different client.
+    misconfigured deployment fails before the first completion is requested.
+
+    ``api_style`` selects the wire format. ``messages`` is the Anthropic Messages
+    API (``POST /v1/messages``, ``x-api-key``); ``chat_completions`` is the
+    OpenAI-compatible shape many gateways expose (``POST /chat/completions``,
+    ``Authorization: Bearer``), where the base URL already carries the version
+    segment. Both produce the same ``LLMCompletion``, so no consumer cares which
+    one a deployment uses.
     """
 
     api_key: str = field(repr=False)
@@ -64,6 +69,7 @@ class LLMClientConfig:
     timeout_seconds: float = 30.0
     max_tokens: int = 1024
     api_version: str = "2023-06-01"
+    api_style: Literal["messages", "chat_completions"] = "messages"
 
     def __post_init__(self) -> None:
         if not self.api_key.strip():
@@ -76,6 +82,8 @@ class LLMClientConfig:
             raise LLMConfigurationError("LLM_MAX_TOKENS must be positive")
         if not self.api_version.strip():
             raise LLMConfigurationError("LLM_API_VERSION must not be empty")
+        if self.api_style not in ("messages", "chat_completions"):
+            raise LLMConfigurationError("LLM_API_STYLE must be 'messages' or 'chat_completions'")
 
     @classmethod
     def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> LLMClientConfig:
@@ -98,6 +106,7 @@ class LLMClientConfig:
             timeout_seconds=timeout,
             max_tokens=max_tokens,
             api_version=env.get("LLM_API_VERSION", "2023-06-01"),
+            api_style=env.get("LLM_API_STYLE", "messages"),  # type: ignore[arg-type]
         )
 
 
@@ -140,13 +149,48 @@ class _MessagesResponse(BaseModel):
     usage: _Usage
 
 
+class _ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    content: str
+
+
+class _ChatChoice(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    message: _ChatMessage
+
+
+class _ChatUsage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    prompt_tokens: int
+    completion_tokens: int
+
+    @field_validator("prompt_tokens", "completion_tokens")
+    @classmethod
+    def validate_tokens(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("token counts must not be negative")
+        return value
+
+
+class _ChatCompletionsResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    choices: list[_ChatChoice]
+    usage: _ChatUsage
+
+
 @dataclass
 class LLMClient:
-    """Minimal Anthropic Messages API client.
+    """Minimal LLM client over two wire formats.
 
     One ``complete`` call, one injectable transport, no retries — the same shape
     as ``JevClient`` so both adapters fail the same way and are testable without
-    a credential.
+    a credential. ``api_style`` on the config picks the request and response
+    shape; everything downstream sees only ``LLMCompletion``.
     """
 
     config: LLMClientConfig
@@ -167,24 +211,14 @@ class LLMClient:
         tokens = self.config.max_tokens if max_tokens is None else max_tokens
         if tokens < 1:
             raise LLMRequestValidationError("max_tokens must be positive")
-        payload = {
-            "model": model,
-            "max_tokens": tokens,
-            "system": system,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        if self.config.api_style == "chat_completions":
+            url, headers, payload = self._chat_request(model, system, prompt, tokens)
+        else:
+            url, headers, payload = self._messages_request(model, system, prompt, tokens)
         timeout = httpx.Timeout(self.config.timeout_seconds)
         async with httpx.AsyncClient(transport=self.transport, timeout=timeout) as client:
             try:
-                response = await client.post(
-                    urljoin(self.config.base_url.rstrip("/") + "/", "v1/messages"),
-                    headers={
-                        "x-api-key": self.config.api_key,
-                        "anthropic-version": self.config.api_version,
-                        "content-type": "application/json",
-                    },
-                    json=payload,
-                )
+                response = await client.post(url, headers=headers, json=payload)
             except httpx.TimeoutException as exc:
                 raise LLMTransportError("LLM service request timed out") from exc
             except httpx.RequestError as exc:
@@ -196,12 +230,57 @@ class LLMClient:
             payload = response.json()
         except (json.JSONDecodeError, ValueError) as exc:
             raise LLMResponseDecodingError() from exc
+        if self.config.api_style == "chat_completions":
+            return self._chat_completion(payload)
+        return self._messages_completion(payload)
+
+    def _messages_request(
+        self, model: str, system: str, prompt: str, tokens: int
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
+        url = urljoin(self.config.base_url.rstrip("/") + "/", "v1/messages")
+        headers = {
+            "x-api-key": self.config.api_key,
+            "anthropic-version": self.config.api_version,
+            "content-type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "max_tokens": tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        return url, headers, payload
+
+    def _chat_request(
+        self, model: str, system: str, prompt: str, tokens: int
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
+        # The base URL already carries the version segment for this style.
+        url = urljoin(self.config.base_url.rstrip("/") + "/", "chat/completions")
+        headers = {
+            "Authorization": "Bearer " + self.config.api_key,
+            "content-type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "max_tokens": tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        return url, headers, payload
+
+    def _messages_completion(self, payload: Any) -> LLMCompletion:
         try:
             result = _MessagesResponse.model_validate(payload)
         except ValidationError as exc:
             raise LLMResponseValidationError() from exc
         text = next(
-            (block.text for block in result.content if block.type == "text" and block.text is not None),
+            (
+                block.text
+                for block in result.content
+                if block.type == "text" and block.text is not None
+            ),
             None,
         )
         if text is None:
@@ -211,4 +290,18 @@ class LLMClient:
             model=result.model,
             input_tokens=result.usage.input_tokens,
             output_tokens=result.usage.output_tokens,
+        )
+
+    def _chat_completion(self, payload: Any) -> LLMCompletion:
+        try:
+            result = _ChatCompletionsResponse.model_validate(payload)
+        except ValidationError as exc:
+            raise LLMResponseValidationError() from exc
+        if not result.choices:
+            raise LLMResponseValidationError()
+        return LLMCompletion(
+            text=result.choices[0].message.content,
+            model=result.model,
+            input_tokens=result.usage.prompt_tokens,
+            output_tokens=result.usage.completion_tokens,
         )

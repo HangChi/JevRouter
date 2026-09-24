@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -24,6 +25,7 @@ from jev_router.clients.jev import (
     ScoreQuestion,
     TransportError,
 )
+from jev_router.router import RISK_LEVELS
 
 API_KEY = "test-secret-do-not-leak"
 
@@ -230,3 +232,167 @@ def test_environment_configuration_requires_api_key() -> None:
     )
     assert loaded.base_url == "https://example.test"
     assert loaded.timeout_seconds == 12
+
+
+# Captured from a live POST /v1/systemone against jev-latest. The score answer
+# carries an index-keyed legend and probabilities, which the phase-1 stubs never
+# produced: every offline test passed while a real run failed validation. This
+# fixture is the contract as observed, not as assumed.
+LIVE_SCORE_RESPONSE = {
+    "model": "jev-1.13.0",
+    "answers": {
+        "next_action": {
+            "type": "choice",
+            "choice": "calculator",
+            "confidence": 0.99,
+            "probabilities": {
+                "ask_user": 0.0,
+                "calculator": 0.99,
+                "finish": 0.01,
+                "delegate_to_llm": 0.0,
+            },
+        },
+        "risk": {
+            "type": "score",
+            "score": 0.0,
+            "confidence": 1.0,
+            "legend": {
+                "0": "No meaningful side effects",
+                "1": "Minor reversible side effects",
+                "2": "Meaningful but reversible action",
+                "3": "External or consequential action",
+                "4": "Potentially destructive or irreversible action",
+            },
+            "probabilities": {"0": 1.0, "1": 0.0, "2": 0.0, "3": 0.0, "4": 0.0},
+        },
+        "requires_confirmation": {"type": "noul", "noul": 0.12},
+        "needs_reasoning": {"type": "noul", "noul": 0.04},
+    },
+    "usage": {"input_tokens": 485, "output_tokens": 100},
+}
+
+
+def live_questions() -> dict[str, Any]:
+    return {
+        "next_action": ChoiceQuestion(
+            instructions="Choose the best next action.",
+            criteria={
+                "calculator": "Evaluate a bounded arithmetic expression.",
+                "ask_user": "More information is required",
+                "delegate_to_llm": "The decision requires complex reasoning",
+                "finish": "The task is already complete",
+            },
+        ),
+        "risk": ScoreQuestion(
+            instructions="Rate the risk.",
+            criteria=list(RISK_LEVELS),
+        ),
+        "requires_confirmation": NoulQuestion(instructions="Should the user confirm?"),
+        "needs_reasoning": NoulQuestion(instructions="Does this need deep reasoning?"),
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_live_score_answer_is_accepted_and_normalized() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=LIVE_SCORE_RESPONSE)
+
+    client = JevClient(config(), httpx.MockTransport(handler))
+    result = await client.systemone(
+        model="jev-latest", state={"goal": "what is 2 + 2?"}, questions=live_questions()
+    )
+
+    risk = result.answers["risk"]
+    assert isinstance(risk, ScoreAnswer)
+    assert risk.legend == list(RISK_LEVELS)
+    assert set(risk.probabilities) == set(RISK_LEVELS)
+    assert math.isclose(sum(risk.probabilities.values()), 1.0)
+    assert risk.probabilities["No meaningful side effects"] == 1.0
+    assert risk.score == 0.0
+    assert (result.usage.input_tokens, result.usage.output_tokens) == (485, 100)
+
+
+def test_a_list_legend_still_validates() -> None:
+    """The label-keyed shape the offline fixtures use remains accepted."""
+    answer = ScoreAnswer.model_validate(
+        {
+            "type": "score",
+            "score": 2.0,
+            "legend": ["low", "medium", "high"],
+            "probabilities": {"low": 0.2, "medium": 0.7, "high": 0.1},
+            "confidence": 0.7,
+        }
+    )
+    assert answer.legend == ["low", "medium", "high"]
+
+
+@pytest.mark.asyncio
+async def test_a_score_answer_keyed_neither_by_index_nor_by_label_is_refused() -> None:
+    """The legend normalizes, so the criteria check is what catches a mismatch."""
+    payload = json.loads(json.dumps(LIVE_SCORE_RESPONSE))
+    payload["answers"]["risk"]["probabilities"] = {"a": 0.5, "b": 0.5}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    client = JevClient(config(), httpx.MockTransport(handler))
+    with pytest.raises(ResponseValidationError):
+        await client.systemone(
+            model="jev-latest", state={"goal": "x"}, questions=live_questions()
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_rounded_distribution_is_accepted() -> None:
+    """The provider rounds to two decimals, so an 8-way sum of 0.99 is valid."""
+    payload = answer_payload()
+    payload["answers"]["route"]["probabilities"] = {
+        "search": 0.33,
+        "finish": 0.33,
+        "retry": 0.33,
+    }
+    payload["answers"]["route"]["choice"] = "search"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    questions = mixed_questions()
+    questions["route"] = ChoiceQuestion(
+        instructions="Choose an action.",
+        criteria={"search": "Search", "finish": "Finish", "retry": "Retry"},
+    )
+    result = await JevClient(config(), httpx.MockTransport(handler)).systemone(
+        model="test-model", state={}, questions=questions
+    )
+    assert result.answers["route"].choice == "search"
+
+
+@pytest.mark.asyncio
+async def test_a_broken_distribution_names_the_check_that_failed() -> None:
+    payload = answer_payload()
+    payload["answers"]["route"]["probabilities"] = {"search": 0.2, "finish": 0.2}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    with pytest.raises(ResponseValidationError) as excinfo:
+        await JevClient(config(), httpx.MockTransport(handler)).systemone(
+            model="test-model", state={}, questions=mixed_questions()
+        )
+    assert "sum to 1" in str(excinfo.value)
+    assert excinfo.value.category == "response_validation"
+
+
+@pytest.mark.asyncio
+async def test_a_mismatched_answer_set_names_the_check_that_failed() -> None:
+    payload = answer_payload()
+    del payload["answers"]["risk"]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload)
+
+    with pytest.raises(ResponseValidationError) as excinfo:
+        await JevClient(config(), httpx.MockTransport(handler)).systemone(
+            model="test-model", state={}, questions=mixed_questions()
+        )
+    assert "questions must match" in str(excinfo.value)

@@ -238,3 +238,93 @@ def test_from_env_rejects_non_numeric_timeout() -> None:
 
 def test_config_repr_hides_the_key() -> None:
     assert API_KEY not in repr(config())
+
+
+STEPFUN_BASE = "https://api.stepfun.com/step_plan/v1"
+
+
+def chat_config(**overrides: Any) -> LLMClientConfig:
+    values: dict[str, Any] = {
+        "api_key": API_KEY,
+        "base_url": STEPFUN_BASE,
+        "api_style": "chat_completions",
+    }
+    values.update(overrides)
+    return LLMClientConfig(**values)
+
+
+def chat_response(text: str = "ok") -> dict[str, Any]:
+    return {
+        "model": "step-5-preview",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 210, "completion_tokens": 18, "total_tokens": 228},
+    }
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_sends_the_openai_shape() -> None:
+    captured: dict[str, Any] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["headers"] = dict(request.headers)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=chat_response("the answer"))
+
+    client = LLMClient(chat_config(), httpx.MockTransport(handler))
+    result = await client.complete(
+        model="step-5-preview", system="be terse", prompt="what is 2+2?", max_tokens=256
+    )
+
+    assert captured["url"] == "https://api.stepfun.com/step_plan/v1/chat/completions"
+    assert captured["headers"]["authorization"] == f"Bearer {API_KEY}"
+    assert "x-api-key" not in captured["headers"]
+    assert captured["body"] == {
+        "model": "step-5-preview",
+        "max_tokens": 256,
+        "messages": [
+            {"role": "system", "content": "be terse"},
+            {"role": "user", "content": "what is 2+2?"},
+        ],
+    }
+    assert result.text == "the answer"
+    assert result.model == "step-5-preview"
+    assert (result.input_tokens, result.output_tokens) == (210, 18)
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_maps_the_error_taxonomy() -> None:
+    async def http_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": "unauthorized"})
+
+    client = LLMClient(chat_config(), httpx.MockTransport(http_handler))
+    with pytest.raises(LLMHttpError) as excinfo:
+        await client.complete(model="m", system="s", prompt="p")
+    assert excinfo.value.status_code == 401
+
+    async def empty_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"model": "m", "choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    client = LLMClient(chat_config(), httpx.MockTransport(empty_handler))
+    with pytest.raises(LLMResponseValidationError):
+        await client.complete(model="m", system="s", prompt="p")
+
+
+def test_an_unknown_api_style_is_refused() -> None:
+    with pytest.raises(LLMConfigurationError, match="LLM_API_STYLE"):
+        LLMClientConfig(api_key=API_KEY, api_style="grpc")  # type: ignore[arg-type]
+
+
+def test_from_env_reads_the_api_style() -> None:
+    resolved = LLMClientConfig.from_env(
+        {
+            "LLM_API_KEY": API_KEY,
+            "LLM_BASE_URL": STEPFUN_BASE,
+            "LLM_API_STYLE": "chat_completions",
+        }
+    )
+    assert resolved.api_style == "chat_completions"
+
+
+def test_from_env_defaults_to_the_messages_style() -> None:
+    assert LLMClientConfig.from_env({"LLM_API_KEY": API_KEY}).api_style == "messages"
