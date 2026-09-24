@@ -136,9 +136,17 @@ LLM 协作者是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配�
 
 ## Eval
 
-`evals/` 只依赖 `jev_router` 的公开接口（`evals/cli.py` 除外，它是唯一跨层模块，用 `apps.api.schemas` 的模型向运行中的 API 投递报告）。五个模块各司其职：`cases.py`（严格 `EvalCase` 模型与版本化 loader）、`cases.json`（50 条固定用例，覆盖五个工具和三个控制动作）、`registry.py`（带固定 fixture 的五工具注册表，保证可复现且离线）、`llm_router.py`（LLM 基线路由，候选集与 `jev_router.Router` 完全一致，要求严格 JSON 输出）、`runner.py`（逐用例路由一次、过一遍真实 PolicyEngine、产出 `CaseOutcome`）、`metrics.py`（纯聚合）、`report.py`（版本化报告序列化）。
+`evals/` 只依赖 `jev_router` 的公开接口（`evals/cli.py` 除外，它是唯一跨层模块，用 `apps.api.schemas` 的模型向运行中的 API 投递报告）。模块各司其职：`cases.py`（严格 `EvalCase` 模型与版本化 loader）、`cases.json`（53 条固定用例，覆盖五个工具和三个控制动作）、`registry.py`（带固定 fixture 的五工具注册表，保证可复现且离线）、`llm_router.py`（LLM 基线路由，候选集与 `jev_router.Router` 完全一致，要求严格 JSON 输出）、`runner.py`（逐用例路由一次、过一遍真实 PolicyEngine、产出 `CaseOutcome`）、`metrics.py`（纯聚合）、`report.py`（版本化报告序列化）。
 
 `CaseOutcome.succeeded` 比"动作可接受"更严：还要求策略的确认结论与用例的 `requires_confirmation` 一致——这正是阈值校准需要的信号。`requires_confirmation` 只对 `write`/`external` 风险工具为真，与 Runner 执行时的强制确认同一条规则，因此该指标衡量的是 Policy Engine 能否自己得出这个结论。延迟百分位用最近秩法（50 个样本的 p95 是排序后第 48 个值），token 统计只覆盖有用例回数的场景。
+
+## 用例设计规则
+
+一条用例的 `expected_action` 必须是**仅凭 goal 就能确定**的那个动作，否则测的是用例作者的想象力，不是路由。第一次真实 eval 因此丢掉了全部 17 个 write/email 用例："把会议要点保存到 notes.md" 没有说要点是什么，两个路由都选 `ask_user` —— 那是正确行为。修法是把内容和收件人写进 goal，让 `write_file`/`send_mock_email` 成为明确正确的下一步；多步目标（"查天气然后发邮件"）期望第一步，不是最后一步。
+
+反过来也必须覆盖：信息确实缺失时，正确动作就是 `ask_user`。用例集里因此有 6 条这类用例（`ask-*` 与 `restraint-*`）。没有它们，`ask_user` 率上升无法区分"正确地拒绝猜测"和"该动手时追问"。
+
+`tests/test_eval_cases.py` 用结构守卫守住这两条规则：期望 `write_file` 的用例 goal 必须含文件名，期望 `send_mock_email` 的必须含 `@`，期望 `ask_user` 的不少于 5 条。改用例导致规则被破坏时测试直接失败，而不是等到下一次真实运行才发现指标莫名变化。
 
 CLI：`uv run python -m evals --mode jev|llm|compare [--limit N] [--json-out PATH]`。凭证全部来自环境变量，缺任何一个都在跑用例之前失败；有用例出错时退出码为 1，配置或用例文件问题为 2，干净运行为 0。评测是显式动作，测试绝不触发真实 provider 调用。
 
