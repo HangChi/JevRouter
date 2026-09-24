@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import BaseModel, ConfigDict, Field
 from support import (
     EMAIL_CANDIDATES,
     OPAQUE_CANDIDATES,
@@ -77,10 +78,16 @@ class ShrinkingRegistry(ToolRegistry):
         return super().get(name)
 
 
+class OpaqueInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: str = Field(min_length=1)
+
+
 class OpaqueTool:
     name = "opaque"
     description = "Returns an output the state snapshot cannot hold."
     risk = "read"
+    input_model = OpaqueInput
 
     def execute(self, input: dict[str, Any]) -> ToolResult:
         return ToolResult(tool_name=self.name, output={"value": object()})

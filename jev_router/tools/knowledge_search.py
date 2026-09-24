@@ -10,8 +10,19 @@ from jev_router.tools.base import RiskLevel, ToolResult
 
 class SearchInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    query: str = Field(min_length=1, max_length=500)
-    limit: int = Field(default=5, ge=1, le=20)
+    query: str = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "The search terms; every term must appear in a document for it to match."
+        ),
+    )
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="How many results to return at most.",
+    )
 
 
 class SearchDocument(BaseModel):
@@ -25,6 +36,7 @@ class KnowledgeSearchTool:
     name = "knowledge_search"
     description = "Search an injected set of local knowledge documents."
     risk: RiskLevel = "read"
+    input_model: type[BaseModel] = SearchInput
 
     def __init__(self, documents: Sequence[SearchDocument | dict[str, Any]]) -> None:
         self._documents = tuple(SearchDocument.model_validate(doc) for doc in documents)

@@ -11,7 +11,14 @@ from jev_router.tools.base import RiskLevel, ToolResult
 
 class CalculatorInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    expression: str = Field(min_length=1, max_length=256)
+    expression: str = Field(
+        min_length=1,
+        max_length=256,
+        description=(
+            "One arithmetic expression using + - * / // % ** and parentheses, "
+            "with numeric literals only."
+        ),
+    )
 
 
 _BINARY_OPERATORS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
@@ -50,6 +57,7 @@ class CalculatorTool:
     name = "calculator"
     description = "Evaluate a bounded arithmetic expression."
     risk: RiskLevel = "read"
+    input_model: type[BaseModel] = CalculatorInput
 
     def execute(self, input: dict[str, Any]) -> ToolResult:
         try:

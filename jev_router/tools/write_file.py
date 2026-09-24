@@ -10,14 +10,25 @@ from jev_router.tools.base import RiskLevel, ToolResult
 
 class WriteFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    path: str = Field(min_length=1, max_length=512)
-    content: str = Field(max_length=1_000_000)
+    path: str = Field(
+        min_length=1,
+        max_length=512,
+        description=(
+            "A relative path inside the workspace root; absolute paths and '..' "
+            "are refused, and an existing file is not overwritten."
+        ),
+    )
+    content: str = Field(
+        max_length=1_000_000,
+        description="The full text to write to the file.",
+    )
 
 
 class WriteFileTool:
     name = "write_file"
     description = "Write a bounded text file under a configured root directory."
     risk: RiskLevel = "write"
+    input_model: type[BaseModel] = WriteFileInput
 
     def __init__(self, root: str | Path, *, allow_overwrite: bool = False, max_bytes: int = 1_000_000) -> None:
         if max_bytes < 1:

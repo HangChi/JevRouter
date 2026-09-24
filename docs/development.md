@@ -56,7 +56,7 @@ verifier 只做评估：不设完成阈值、不修改状态、不执行工具�
 
 `jev_router/clients/llm.py` 是与 `clients/jev.py` 对等的 LLM 适配器：冻结的 `LLMClientConfig`（key、base URL、超时、max tokens、API 版本）在构造时校验并提供 `from_env`，`LLMClient.complete(model=..., system=..., prompt=...)` 通过可注入的 httpx transport 发一次 Anthropic Messages API 请求，返回 `LLMCompletion`（text、model、input/output tokens）。错误分类与 Jev client 一致（`configuration`/`request_validation`/`transport`/`http`/`response_decoding`/`response_validation`），调用方按 `category` 处理，不解析供应商错误体。
 
-核心包不自行调用 LLM：适配器存在的意义是让 API 的委托分支和 eval 的基线路由共用同一个经过测试的客户端。`RouteDecision` 带有可选的 `input_tokens`/`output_tokens`，来自响应的 `usage`，因为对比指标需要它；缺失时为 `None` 而不是 0。
+核心包不自行调用 LLM：适配器存在的意义是让 API 的委托分支、参数合成和 eval 的基线路由共用同一个经过测试的客户端。`RouteDecision` 带有可选的 `input_tokens`/`output_tokens`，来自响应的 `usage`，因为对比指标需要它；缺失时为 `None` 而不是 0。
 
 ## Runner
 
@@ -66,7 +66,7 @@ verifier 只做评估：不设完成阈值、不修改状态、不执行工具�
 
 完成阈值由 Runner 持有（默认 0.75，与 Policy Engine 的 MVP 阈值一致），验证不通过就带着前进后的 state 重新路由。若同一个未变化的 state 第二次被判为未完成，直接以 `failed` 停止并留下诊断，而不是把同样的 payload 反复发给 provider 直到预算耗尽。
 
-四个协作者通过 Protocol 注入，缺省全部 fail closed：`ActionInputResolver`（缺省 `{}`，由工具自身 schema 拒绝）、`ConfirmationHandler`（缺省 `needs_confirmation`）、`UserInputHandler`（缺省 `needs_user_input`）、`DelegateHandler`（缺省 `failed`）。`ActionInputResolver` 是参数合成的接缝——`RouteDecision` 只给动作名不给参数，而参数合成属于 LLM 职责，本阶段不实现 `clients/llm.py`。
+四个协作者通过 Protocol 注入，缺省全部 fail closed：`ActionInputResolver`（缺省 `{}`，由工具自身 schema 拒绝）、`ConfirmationHandler`（缺省 `needs_confirmation`）、`UserInputHandler`（缺省 `needs_user_input`）、`DelegateHandler`（缺省 `failed`）。`ActionInputResolver` 是参数合成的接缝——`RouteDecision` 只给动作名不给参数，而参数合成属于 LLM 职责；第十三阶段用 `LLMArgumentResolver` 填上了这个接缝。
 
 确认发生在参数合成**之后**：handler 收到的是即将执行的那份参数，而不是只有一个动作名。`tool.risk` 为 `write` 或 `external` 时，即使策略结论是 `execute` 也强制确认——这一条是 Policy Engine 阶段明确推迟到 Runner 的欠账，只信 Jev 概率会让 mock email 和 write_file 在低概率下被自动执行。
 
@@ -102,7 +102,11 @@ run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输�
 
 eval 结果走同一套存储约定：`eval_runs`（一行一个 run，metrics 载荷）+ `eval_case_results`（一行一条用例结果，按 `(run_id, case_id, mode)` 主键），schema 版本随加法升级到 2，JSON 列沿用同一版本信封，重复记录同一 run id 只替换不追加。`POST /evals` 校验严格 schema、mode 与 outcomes 的一致性（compare 必须每个用例两个路由都有），以及 rates 的取值范围；`GET /evals` 按创建时间倒序分页，`GET /evals/{run_id}` 返回 metrics 和按 `(case_id, mode)` 排序的用例行。未知 run → `404`，`limit < 1` → `400`，body 不过 schema → `422`。API 只校验形状，不重算指标：报告的 rates 是随数据一起写出的，重算会让两份算术有漂移空间。
 
-LLM 委托是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配置（`LLM_API_KEY` + `LLM_MODEL`），要么同时缺省；只设其一在启动时报错。配置了才构造 `_LLMDelegate`，把 LLM 生成的推理文本作为 `delegate_to_llm` 步骤的结果交给 Runner 记录，下一步路由因此能在 history 里看到它。没有配置时保持第七阶段原始的 fail closed 行为：run 以 `failed` 停止并留下 "delegation was requested but no handler is configured" 诊断。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run——委托静默返回空比失败更糟。
+LLM 协作者是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配置（`LLM_API_KEY` + `LLM_MODEL`），要么同时缺省；只设其一在启动时报错。配置了才构造 `LLMDelegate` 和 `LLMArgumentResolver`（同在 `apps/api/llm.py`，共用一个 client 和 model）——前者把 LLM 生成的推理文本作为 `delegate_to_llm` 步骤的结果交给 Runner 记录，后者为即将执行的工具合成参数。一个配置驱动两者：能推理但不能参数化的 agent 没有用处。
+
+没有配置时保持第七阶段原始的 fail closed 行为：委托请求让 run 以 `failed` 停止并留下 "delegation was requested but no handler is configured"，工具调用则解析出空参数、由工具自己的 schema 拒绝。显式注入的 `resolver=` 优先于 LLM 的那一个——它是调用方自己的接缝（测试就用它）。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run；委托静默返回空、或用空参数执行工具，都比失败更糟。
+
+`Tool` 协议因此多了一个成员 `input_model`：工具 `execute` 真正校验的那个 pydantic 模型。参数合成需要告诉模型该给什么，而唯一诚实的描述就是校验本身用的那份——从 `model_json_schema()` 派生提示词，使提示词不可能广告一个工具会拒绝的字段。模型的输出仍然是不可信输入：resolver 原样返回，工具自己的 schema 依旧是唯一权威。
 
 ## Web 层
 
@@ -143,7 +147,7 @@ apps/web -> apps/api HTTP contract
 - 单元测试：状态转换、策略阈值边界、工具输入校验、预算耗尽。
 - 集成测试：使用 stub HTTP client 验证 Jev/LLM request/response 映射和失败处理，不要求真实 API key。
 - 存储测试：临时 SQLite 文件验证 trace 往返、增量写入、版本化载荷、脱敏与降级。
-- API 测试：请求 schema、错误状态码、确认流程、LLM 委托装配及 trace 输出。
+- API 测试：请求 schema、错误状态码、确认流程、LLM 委托与参数合成装配及 trace 输出，含一次用合成参数真实执行工具的端到端 run。
 - Web 测试：vitest 覆盖视图模型与 API 客户端（注入 fetch），加上 `tsc --noEmit` 与 `next build`。
 - Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。用例集本身由测试校验，loader 规则与提交的 `cases.json` 不会悄悄漂移。
 - 存储与 API：临时 SQLite 文件验证 eval run 往返、重复记录幂等、载荷版本拒绝，以及 version-1 数据库升级后仍可写读；`TestClient` 验证 `POST/GET /evals` 的状态码与 round-trip。

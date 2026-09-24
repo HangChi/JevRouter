@@ -15,15 +15,17 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `jev_router/policy.py` | 将置信度、风险与确认要求映射到允许的控制动作 |
 | `jev_router/runner.py` | 有预算上限的 route/execute/verify 状态循环 |
 | `jev_router/verifier.py` | 判断结果是否满足目标，并给出完成概率与结果质量评估 |
-| `jev_router/tools/base.py` | 工具输入、输出、风险等级和执行协议 |
+| `jev_router/tools/base.py` | 工具输入、输出、风险等级、输入模型和执行协议 |
 | `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
-| `apps/api/` | HTTP 边界、配置、SQLite trace 存储和核心服务装配 |
+| `apps/api/` | HTTP 边界、配置、SQLite trace 存储、LLM 协作者和核心服务装配 |
 | `apps/web/` | 发起任务、确认待办、查看运行 trace |
 | `evals/` | 固定数据集、LLM 基线路由、运行器、指标计算和报告投递 |
 
 Core task state and execution budgets are immutable snapshots. State advancement records each completed action/result; budget consumption decrements a finite step or model-call allowance and rejects exhausted limits. The later Runner owns when to consume these budgets and how to stop. Persistence and serialization are outside the state contract.
 
 核心包不应依赖 FastAPI 或前端框架。服务适配器负责将供应商响应转换为内部模型，避免供应商字段渗入 policy 和 runner。
+
+模型输出（包括参数合成产物）是不可信输入：`Tool.input_model` 既是提示词的来源，也是 `execute` 的校验依据，两者因此不可能漂移；工具的参数约束（路径沙箱、AST 白名单、长度上限）对合成参数与手写参数一视同仁。
 
 `apps/web/` 只依赖 `apps/api` 的 HTTP 契约，并且所有 API 调用都发生在 Next.js 服务端：server component 负责读，server action 负责写，浏览器只与 Next.js 服务器同源通信。这样 `apps/api` 不需要为浏览器开 CORS，凭证也不可能进入前端代码或响应体。实时刷新用轮询而不是流式，因为 API 没有流式端点；轮询在 run 到达终态时停止。
 
@@ -32,7 +34,7 @@ Core task state and execution budgets are immutable snapshots. State advancement
 1. 校验并规范化用户目标及可用工具集合。
 2. Router 请求一次 Jev 评估，涵盖候选动作、风险、确认需求和复杂推理需求；候选工具只来自可信注册配置，模型名从服务能力发现或配置中获取，不永久硬编码。
 3. Policy Engine revalidates that a recommended tool action is currently registered, then applies explicit confidence, risk, confirmation, and reasoning thresholds to select a control outcome. `execute` is not a tool call; any required explicit user approval must be obtained separately by the caller.
-4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供；`delegate_to_llm` 分支同理，只有服务端显式配置了 LLM（`LLM_API_KEY` + `LLM_MODEL`）时才装配委托 handler，否则 fail closed。
+4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供；配置了 LLM（`LLM_API_KEY` + `LLM_MODEL`）时由 `LLMArgumentResolver` 填充该接缝，未配置时工具以自己的 schema 拒绝空参数而 fail closed。`delegate_to_llm` 分支同理。
 5. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
 6. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
 7. 每一步产生一条 `StepTrace`，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟；Runner 在内存中产出，持久化由 `apps/api/storage.py` 负责。

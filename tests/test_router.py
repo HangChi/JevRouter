@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
+from pydantic import BaseModel, ConfigDict, Field
 
 from jev_router.clients.jev import HttpError, JevClient, JevClientConfig
 from jev_router.router import RISK_LEVELS, RouteDecision, Router
@@ -12,10 +13,16 @@ from jev_router.tools.base import ToolResult
 from jev_router.tools.registry import ToolRegistry
 
 
+class StubInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(min_length=1)
+
+
 class StubTool:
     name = "lookup"
     description = "Read a local record"
     risk = "read"
+    input_model = StubInput
 
     def __init__(self) -> None:
         self.executed = False

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import BaseModel, ConfigDict, Field
 
 from jev_router.policy import PolicyEngine
 from jev_router.router import RouteDecision
@@ -10,10 +11,16 @@ from jev_router.tools.base import ToolResult
 from jev_router.tools.registry import ToolRegistry
 
 
+class StubInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(min_length=1)
+
+
 class StubTool:
     name = "lookup"
     description = "Read a local record"
     risk = "read"
+    input_model = StubInput
 
     def __init__(self) -> None:
         self.executed = False

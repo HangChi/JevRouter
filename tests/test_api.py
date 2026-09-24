@@ -49,6 +49,7 @@ def api(tmp_path: Path):
         tools: ToolRegistry | None = None,
         resolver: Any = None,
         llm_client: Any = None,
+        stub_resolver: bool = True,
         **settings: Any,
     ) -> TestClient:
         resolved = Settings(
@@ -64,7 +65,11 @@ def api(tmp_path: Path):
             resolved,
             store=store,
             tools=tools if tools is not None else ToolRegistry([CalculatorTool()]),
-            resolver=resolver if resolver is not None else StubResolver(),
+            resolver=(
+                resolver
+                if resolver is not None
+                else (StubResolver() if stub_resolver else None)
+            ),
             client=JevClient(resolved.jev, fake.transport()),
             llm_client=llm_client,
         )
@@ -629,3 +634,94 @@ def test_an_empty_outcome_list_is_rejected(api: Any) -> None:
         response = client.post("/evals", json=body)
 
     assert response.status_code == 422
+
+
+def test_a_run_executes_with_llm_synthesized_arguments(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+    llm = StubLLM('{"expression": "6 * 7"}')
+
+    with api(fake, llm_client=llm, stub_resolver=False, **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+        traces = client.get(f"/tasks/{task_id}/traces").json()["traces"]
+
+    assert body["status"] == "completed"
+    assert traces[0]["executed"] is True
+    assert traces[0]["arguments"] == {"expression": "6 * 7"}
+    assert traces[0]["result"] == {"result": 42.0}
+    assert llm.calls[0]["model"] == "claude-sonnet-4-5"
+    assert "Calculate 2 + 2" in llm.calls[0]["prompt"]
+    assert "- expression (string, required)" in llm.calls[0]["prompt"]
+
+
+def test_a_failed_synthesis_stops_the_run_with_its_cause(api: Any) -> None:
+    class BrokenLLM:
+        async def complete(self, **kwargs: Any) -> Any:
+            raise LLMHttpError(429)
+
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+
+    with api(fake, llm_client=BrokenLLM(), stub_resolver=False, **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert "argument synthesis failed: http" in (body["diagnostic"] or "")
+
+
+def test_a_malformed_synthesis_stops_the_run(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+
+    with api(fake, llm_client=StubLLM("I would compute 6 * 7."), stub_resolver=False, **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert "JSON object" in (body["diagnostic"] or "")
+
+
+def test_arguments_the_tool_refuses_stop_the_run(api: Any) -> None:
+    """The resolver returns the model's object unchanged; the tool decides."""
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+
+    with api(fake, llm_client=StubLLM('{"expression": "import os"}'), stub_resolver=False, **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+        traces = client.get(f"/tasks/{task_id}/traces").json()["traces"]
+
+    assert body["status"] == "failed"
+    assert "rejected its input" in (body["diagnostic"] or "")
+    assert traces[0]["arguments"] == {"expression": "import os"}
+
+
+def test_an_unconfigured_service_still_fails_closed_on_a_tool_call(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+
+    with api(fake, stub_resolver=False) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+
+    assert body["status"] == "failed"
+    assert "rejected its input" in (body["diagnostic"] or "")
+
+
+def test_an_injected_resolver_still_wins_over_the_llm_one(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake, llm_client=StubLLM('{"expression": "6 * 7"}'), **llm_settings()) as client:
+        task_id = submit(client)
+        body = wait_for_terminal(client, task_id)
+        traces = client.get(f"/tasks/{task_id}/traces").json()["traces"]
+
+    assert body["status"] == "completed"
+    # The injected stub answers 2 + 2, so the LLM's arguments were not used.
+    assert traces[0]["arguments"] == {"expression": "2 + 2"}
+    assert traces[0]["result"] == {"result": 4.0}

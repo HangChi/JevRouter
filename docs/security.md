@@ -28,6 +28,8 @@
 
 用户输入、搜索结果、工具输出和模型响应均视为不可信数据。把内容作为数据传递，不允许其中的指令覆盖系统策略或工具权限。对工具参数按工具 schema 校验，并限制长度和资源消耗。
 
+LLM 合成的工具参数同样不可信：resolver 原样返回模型输出，由工具自己的 pydantic 模型校验，`write_file` 的路径沙箱、`calculator` 的 AST 白名单和长度上限对它与手写参数完全一致。提示词中的参数说明从同一个模型派生（`Tool.input_model`），所以提示词无法广告一个工具会拒绝的字段。
+
 ## 凭证和日志
 
 API key 仅从服务端环境或受控密钥存储读取。不得提交 `.env`、在前端暴露 key、把 Authorization header 或原始密钥写入 trace。Jev 与 LLM 的凭证遵循同一条规则：`LLM_API_KEY` 只存在于 API 进程，`x-api-key` header 不进 trace，store 的结构性保证同样适用（它只看得到 `RunResult`/`StepTrace`）。持久化用户目标和工具输入/输出前，应考虑敏感数据最小化、保留期限和访问控制；生产部署前定义删除与脱敏策略。

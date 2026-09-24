@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from jev_router.tools.base import RiskLevel, ToolResult
 from jev_router.tools.knowledge_search import SearchDocument, SearchInput
@@ -13,6 +13,7 @@ class WebSearchMockTool:
     name = "web_search"
     description = "Search deterministic, injected mock web results; performs no network requests."
     risk: RiskLevel = "read"
+    input_model: type[BaseModel] = SearchInput
 
     def __init__(self, results: Sequence[SearchDocument | dict[str, Any]] = ()) -> None:
         self._results = tuple(SearchDocument.model_validate(result) for result in results)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from jev_router.tools import (
     CalculatorTool,
@@ -121,3 +122,31 @@ def test_mock_email_validates_and_only_returns_simulated_metadata() -> None:
     assert result.output == {"status": "simulated", "to": "alice@example.test", "subject": "Weather"}
     with pytest.raises(ValueError, match="invalid mock email"):
         tool.execute({"to": "not-an-email", "subject": "Weather", "body": "Sunny"})
+
+
+def test_every_tool_declares_the_model_its_execute_validates() -> None:
+    """The LLM argument resolver reads the schema from `input_model`.
+
+    If a tool declared a model its `execute` does not actually validate against,
+    the prompt would advertise a shape the tool refuses — so the two are checked
+    against each other here rather than trusted to stay in step.
+    """
+    documents = [SearchDocument(title="t", content="c")]
+    tools = [
+        CalculatorTool(),
+        KnowledgeSearchTool(documents),
+        WebSearchMockTool(),
+        WriteFileTool("/tmp/jevrouter-tool-protocol"),
+        MockEmailTool(),
+    ]
+    for tool in tools:
+        schema = tool.input_model.model_json_schema()
+        assert schema["type"] == "object"
+        assert schema.get("properties"), tool.name
+        # A field the schema does not describe must be refused by the tool.
+        rejected = False
+        try:
+            tool.input_model.model_validate({"unknown_field": "x"})
+        except ValidationError:
+            rejected = True
+        assert rejected, tool.name
