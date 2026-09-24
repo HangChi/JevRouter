@@ -63,6 +63,7 @@ uv run python -m evals --mode compare --json-out evals-report.json
 - [架构与模块边界](docs/architecture.md)
 - [开发与验证约定](docs/development.md)
 - [安全与策略边界](docs/security.md)
+- [Web 仪表盘手动验证清单](docs/web-manual-checks.md)
 - [原始产品设计草案](doc.md)
 
 ## 状态
