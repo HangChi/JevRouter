@@ -59,7 +59,11 @@ class LLMDelegate:
         except LLMClientError as exc:
             raise ValueError(f"delegation failed: {exc.category}") from exc
         if not completion.text.strip():
-            raise ValueError("the delegate handler returned no result")
+            raise ValueError(
+                "the delegate handler returned no result; an empty completion from a "
+                "reasoning model usually means LLM_MAX_TOKENS was exhausted before "
+                "any content was produced"
+            )
         return completion.text
 
 
@@ -183,6 +187,11 @@ def _render_schema(model: type[BaseModel]) -> str:
 
 
 def _parse_arguments(text: str, model: type[BaseModel]) -> dict[str, Any]:
+    if not text.strip():
+        raise ValueError(
+            "the completion was empty; a reasoning model with too small an "
+            "LLM_MAX_TOKENS spends its budget before producing content"
+        )
     payload = _extract_object(text)
     if not payload:
         raise ValueError("the completion did not contain a JSON object of arguments")

@@ -13,6 +13,11 @@ Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`
 
 LLM client 的 `api_style` 选择 wire format：`messages`（Anthropic，默认）或 `chat_completions`（OpenAI 兼容网关，base URL 需自带版本段，如 `https://api.stepfun.com/step_plan/v1`）。两者产出同一个 `LLMCompletion`，消费者不关心部署用哪种。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
+reasoning 模型有两个联动限制，用 StepFun `step-5-preview` 实测确认：
+
+- **`LLM_MAX_TOKENS` 太小会返回空 completion**。默认 1024 会被思考过程吃光，模型还没产出内容就结束，`LLMCompletion.text` 是空串，委托和参数合成随之失败。这不是解析问题——把预算提到 8192 后同样的用例立刻返回合法 JSON。委托与 resolver 的错误信息因此直接点名这个原因。
+- **超时是另一个瓶颈**。放开预算后单个用例要 7～30 秒，默认 30s 超时开始切掉慢用例。评测这类模型时应同时调大 `LLM_MAX_TOKENS` 和 `LLM_TIMEOUT_SECONDS`；生产上则要权衡——委托和参数合成本来只该产生很短输出，大预算主要是评测基线所需。
+
 ## 安装与检查
 
 ```sh

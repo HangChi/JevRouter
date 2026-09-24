@@ -48,6 +48,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--jev-model", default=None, help="Jev model id (default: $JEV_MODEL)")
     parser.add_argument("--llm-model", default=None, help="LLM model id (default: $LLM_MODEL)")
     parser.add_argument(
+        "--llm-max-tokens",
+        type=int,
+        default=None,
+        help=(
+            "Completion budget for the baseline (default: $LLM_MAX_TOKENS, else 1024). "
+            "A reasoning model spends it before producing content, so raise it for those."
+        ),
+    )
+    parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=None,
+        help="Per-request timeout in seconds for the baseline (default: $LLM_TIMEOUT_SECONDS, else 30)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -81,7 +96,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         jev = _jev_router(args.jev_model) if args.mode in ("jev", "compare") else None
-        llm = _llm_router(args.llm_model) if args.mode in ("llm", "compare") else None
+        llm = (
+            _llm_router(args.llm_model, args.llm_max_tokens, args.llm_timeout)
+            if args.mode in ("llm", "compare")
+            else None
+        )
     except (JevClientError, LLMClientError, ValueError) as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         return EXIT_CONFIGURATION
@@ -159,11 +178,23 @@ def _jev_router(model: str | None) -> Router:
     return Router(JevClient(config), resolved, default_registry(_workspace()))
 
 
-def _llm_router(model: str | None) -> LLMRouter:
+def _llm_router(model: str | None, max_tokens: int | None, timeout: float | None) -> LLMRouter:
     config = LLMClientConfig.from_env()
     resolved = model or _env("LLM_MODEL")
     if not resolved:
         raise ValueError("an LLM model is required (--llm-model or $LLM_MODEL)")
+    if max_tokens is not None or timeout is not None:
+        # The baseline is a measurement instrument: a reasoning model needs a
+        # budget the delegate and the resolver would consider wasteful, so the
+        # eval gets its own knobs instead of an environment-wide change.
+        config = LLMClientConfig(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout_seconds=config.timeout_seconds if timeout is None else timeout,
+            max_tokens=config.max_tokens if max_tokens is None else max_tokens,
+            api_version=config.api_version,
+            api_style=config.api_style,
+        )
     return LLMRouter(LLMClient(config), resolved, default_registry(_workspace()))
 
 

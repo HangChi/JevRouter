@@ -41,7 +41,7 @@ class FakeLLMRouter:
 
 def patch_routers(monkeypatch: Any) -> None:
     monkeypatch.setattr(cli, "_jev_router", lambda model: FakeJevRouter())
-    monkeypatch.setattr(cli, "_llm_router", lambda model: FakeLLMRouter())
+    monkeypatch.setattr(cli, "_llm_router", lambda model, max_tokens=None, timeout=None: FakeLLMRouter())
 
 
 def test_missing_credentials_are_a_configuration_error(monkeypatch: Any, capsys: Any) -> None:
@@ -189,3 +189,48 @@ def test_a_refused_report_reports_the_api_message(monkeypatch: Any, capsys: Any)
 
     assert code == cli.EXIT_DELIVERY
     assert "body.mode: unknown" in capsys.readouterr().err
+
+
+def test_the_llm_budget_and_timeout_flags_reach_the_client(monkeypatch: Any) -> None:
+
+
+    captured: dict[str, Any] = {}
+
+    def fake_router(model: str, max_tokens: int | None, timeout: float | None) -> Any:
+        captured["max_tokens"] = max_tokens
+        captured["timeout"] = timeout
+        return FakeLLMRouter()
+
+    monkeypatch.setattr(cli, "_llm_router", fake_router)
+    monkeypatch.setattr(cli, "_jev_router", lambda model: FakeJevRouter())
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "step-5-preview")
+    monkeypatch.setenv("LLM_BASE_URL", "https://gateway.test/v1")
+    monkeypatch.setenv("LLM_API_STYLE", "chat_completions")
+
+    code = cli.main(
+        ["--mode", "compare", "--limit", "1", "--llm-max-tokens", "8192", "--llm-timeout", "90"]
+    )
+
+    assert code == cli.EXIT_OK
+    assert captured == {"max_tokens": 8192, "timeout": 90.0}
+
+
+def test_the_llm_flags_default_to_the_environment(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_router(model: str, max_tokens: int | None, timeout: float | None) -> Any:
+        captured["max_tokens"] = max_tokens
+        captured["timeout"] = timeout
+        return FakeLLMRouter()
+
+    monkeypatch.setattr(cli, "_llm_router", fake_router)
+    monkeypatch.setattr(cli, "_jev_router", lambda model: FakeJevRouter())
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "m")
+    monkeypatch.delenv("LLM_MAX_TOKENS", raising=False)
+
+    code = cli.main(["--mode", "compare", "--limit", "1"])
+
+    assert code == cli.EXIT_OK
+    assert captured == {"max_tokens": None, "timeout": None}

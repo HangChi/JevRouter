@@ -191,3 +191,17 @@ async def test_the_delegate_carries_a_provider_error_category() -> None:
     delegate = LLMDelegate(BrokenCompleter(), MODEL)
     with pytest.raises(ValueError, match="delegation failed: http"):
         await delegate.delegate(state())
+
+
+@pytest.mark.asyncio
+async def test_an_empty_completion_names_the_likely_cause(tmp_path: Any) -> None:
+    subject, _ = resolver(tmp_path, "   ")
+    with pytest.raises(ValueError, match="LLM_MAX_TOKENS"):
+        await subject.resolve("calculator", state())
+
+
+@pytest.mark.asyncio
+async def test_the_delegate_names_the_likely_cause_of_an_empty_answer() -> None:
+    delegate = LLMDelegate(StubCompleter(""), MODEL)
+    with pytest.raises(ValueError, match="LLM_MAX_TOKENS"):
+        await delegate.delegate(state())
