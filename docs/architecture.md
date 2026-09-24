@@ -19,7 +19,7 @@ JevRouter 使用 TypeSafe Jev 对有限候选动作进行结构化判断，并�
 | `jev_router/tools/` | calculator、search、knowledge、file 和 mock email 实现 |
 | `apps/api/` | HTTP 边界、配置、SQLite trace 存储和核心服务装配 |
 | `apps/web/` | 发起任务、确认待办、查看运行 trace |
-| `evals/` | 固定数据集、LLM 基线路由、运行器和指标计算 |
+| `evals/` | 固定数据集、LLM 基线路由、运行器、指标计算和报告投递 |
 
 Core task state and execution budgets are immutable snapshots. State advancement records each completed action/result; budget consumption decrements a finite step or model-call allowance and rejects exhausted limits. The later Runner owns when to consume these budgets and how to stop. Persistence and serialization are outside the state contract.
 
@@ -42,6 +42,8 @@ MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, 
 
 `evals/` 的用例、基线路由和指标都只依赖 `jev_router` 公开接口；LLM 基线与 Jev 看到同一份 goal/history 和同一份候选集，但它不产生概率，因此对比表里它的置信度一栏必须留空而不是填 0。eval 运行是显式的 CLI 动作，测试不会触发真实 provider 调用。
 
+对比仪表盘只读已记录的 run：`GET /evals` 列表 + `GET /evals/{run_id}` 详情，渲染聚合卡片与逐用例对比表。它不重算、不轮询、不起跑——一个 run 是结束了的记录，把“提供方故障”和“两个路由 genuinely 分歧”区分开是显示层的事：出错的行显示错误，且不计入一致率的分母。
+
 模型提供建议而非授权。`finish`、`ask_user` 和 `delegate_to_llm` 必须作为受控分支处理，不能被当作工具名无条件执行。Policy Engine 只返回控制结果，不调用工具，也不代替用户确认。
 
 ## 状态和持久化
@@ -49,6 +51,8 @@ MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, 
 核心状态至少应表达 task id、goal、status、step、context、available tools、history、last result 和调用预算。持久化实体从 `tasks`、`agent_steps`、`evaluations` 开始，实现在 `apps/api/storage.py`；SQLite 是 MVP 默认方案。序列化格式分两层版本化——schema 版本走 `PRAGMA user_version`，每个 JSON 载荷自带版本信封——避免未来 schema 变更使旧 trace 无法读取，或更糟地被静默误读。两者都不自动迁移，遇到不认识的版本直接拒绝。
 
 `TaskState` 本身仍不含 task id 和 status：这两项由 Runner 的 `RunResult` 承载，持久化时落到 `tasks` 行。核心包不依赖任何数据库实现。
+
+eval 结果是第二类持久化实体：`eval_runs` 与 `eval_case_results` 从第十二阶段加入，与 trace 共用同一套版本信封和 upsert 惯例，schema 版本随加法递增。eval 报告由 CLI 通过 `POST /evals` 投递，API 校验其形状与 mode/outcome 一致性后原样存储，不重算指标——报告的 rates 随数据一起写出，读取时不需要本构建的算术参与解释。`evals/` 的库模块只依赖 `jev_router` 公开接口；只有 CLI 通过 HTTP 与 API 对话。
 
 ## 非目标
 

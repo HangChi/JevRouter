@@ -208,3 +208,44 @@ describe("readFromApi", () => {
     });
   });
 });
+
+describe("eval reads", () => {
+  const summary = {
+    run_id: "run-1",
+    mode: "compare",
+    created_at: "2026-09-24T00:00:00+00:00",
+    case_count: 50,
+  };
+
+  it("lists eval runs with an optional limit", async () => {
+    const { calls, fetchImpl } = stubFetch(() => jsonResponse({ runs: [summary] }));
+    const client = createApiClient({ upstream: UPSTREAM, fetchImpl });
+
+    const listed = await client.listEvalRuns(5);
+
+    expect(calls[0].input).toBe(`${UPSTREAM}/evals?limit=5`);
+    expect(listed.runs).toEqual([summary]);
+  });
+
+  it("reads one eval run and encodes its id", async () => {
+    const { calls, fetchImpl } = stubFetch(() =>
+      jsonResponse({ ...summary, metrics: {}, outcomes: [] }),
+    );
+    const client = createApiClient({ upstream: UPSTREAM, fetchImpl });
+
+    await client.getEvalRun("../../runs");
+
+    expect(calls[0].input).toBe(`${UPSTREAM}/evals/..%2F..%2Fruns`);
+  });
+
+  it("maps a 404 on an unknown run to an ApiError", async () => {
+    const { fetchImpl } = stubFetch(() => jsonResponse({ detail: "eval run not found" }, 404));
+    const client = createApiClient({ upstream: UPSTREAM, fetchImpl });
+
+    await expect(client.getEvalRun("missing")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "eval run not found",
+    });
+  });
+});

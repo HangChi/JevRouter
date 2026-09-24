@@ -1,8 +1,9 @@
 # JevRouter trace dashboard
 
 A Next.js reader for the JevRouter API (`apps/api`). It lists runs, shows every
-step's routing signals, policy outcome, execution result and latency, and lets an
-operator answer the confirmation and input prompts a run raises.
+step's routing signals, policy outcome, execution result and latency, lets an
+operator answer the confirmation and input prompts a run raises, and renders the
+recorded eval runs — the Jev-vs-LLM routing comparison and its aggregate metrics.
 
 ## Running it
 
@@ -40,15 +41,30 @@ process.
 
 ```text
 src/
-├── app/                     # routes: the run list and one task detail page
+├── app/                     # routes: the run list, a task page, the eval list and an eval run
 ├── actions/tasks.ts         # server actions: submit, confirm, provide input
 ├── components/              # presentation only
 └── lib/                     # types, thresholds, API client, view model (+ tests)
 ```
 
 `src/lib/viewModel.ts` holds the pure decisions — what a status means, which
-branch a step took, whether a threshold was crossed — so they are unit-tested
-without rendering anything. Components lay out and style.
+branch a step took, whether a threshold was crossed, which aggregate cards a mode
+can show, how the two routers' rows pair up — so they are unit-tested without
+rendering anything. Components lay out and style.
+
+## Evals
+
+`/evals` lists the runs the API has recorded and shows the newest run's aggregate
+cards: each mode's expected/allowed match, success, escalation and confirmation
+fit, with latency percentiles and token totals. `/evals/<run_id>` adds one row per
+case with both routers' actions, their latencies and tokens, and whether they
+agreed.
+
+A run is a finished record, so nothing here polls and nothing here starts one:
+the eval CLI records it (`uv run python -m evals --mode compare --api <url>` from
+the repository root). Metrics a mode cannot produce — the LLM baseline has no
+policy outcome — are left out rather than shown as zero, and a router that errored
+shows its error instead of an action, which is not counted as a disagreement.
 
 ## Checks
 
@@ -68,3 +84,6 @@ npm run build      # production build
 - `route_risk` and `quality_score` are provider scores the core package does not
   normalize; they are shown as raw numbers with their scale stated, never as 0–1
   probability bars.
+- An eval run's metrics are stored as reported. The API validates their shape and
+  the mode/outcome consistency, but does not recompute them, so a report is only
+  as trustworthy as the run that produced it.

@@ -2,7 +2,7 @@
 
 ## 项目状态
 
-Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘和 eval 运行器均已完成；eval 结果的持久化与对比仪表盘尚未实现。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
+Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘、eval 运行器，以及 eval 结果的持久化与对比仪表盘均已完成。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。模型名由调用方显式提供，模型发现不属于已实现范围。项目使用 `pyproject.toml` 和 `uv.lock` 管理依赖。
 
 ## 安装与检查
 
@@ -100,17 +100,21 @@ run 以后台协程执行，请求从不阻塞在 run 上。确认和用户输�
 
 `default_registry` 只注册 calculator、write_file 和 send_mock_email；两个搜索工具需要调用方注入文档，不放进默认集合。store 只在 app 自己创建时才由 lifespan 关闭，注入的 store 归调用方所有。
 
+eval 结果走同一套存储约定：`eval_runs`（一行一个 run，metrics 载荷）+ `eval_case_results`（一行一条用例结果，按 `(run_id, case_id, mode)` 主键），schema 版本随加法升级到 2，JSON 列沿用同一版本信封，重复记录同一 run id 只替换不追加。`POST /evals` 校验严格 schema、mode 与 outcomes 的一致性（compare 必须每个用例两个路由都有），以及 rates 的取值范围；`GET /evals` 按创建时间倒序分页，`GET /evals/{run_id}` 返回 metrics 和按 `(case_id, mode)` 排序的用例行。未知 run → `404`，`limit < 1` → `400`，body 不过 schema → `422`。API 只校验形状，不重算指标：报告的 rates 是随数据一起写出的，重算会让两份算术有漂移空间。
+
 LLM 委托是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配置（`LLM_API_KEY` + `LLM_MODEL`），要么同时缺省；只设其一在启动时报错。配置了才构造 `_LLMDelegate`，把 LLM 生成的推理文本作为 `delegate_to_llm` 步骤的结果交给 Runner 记录，下一步路由因此能在 history 里看到它。没有配置时保持第七阶段原始的 fail closed 行为：run 以 `failed` 停止并留下 "delegation was requested but no handler is configured" 诊断。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run——委托静默返回空比失败更糟。
 
 ## Web 层
 
-`apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的六个端点。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
+`apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的端点（六个任务相关 + 三个 eval 相关）。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
 
 `src/lib/types.ts` 是 `apps/api/schemas.py` 的手写镜像，不是生成的客户端：API 是唯一事实来源，字段变更必须同步。`src/lib/thresholds.ts` 是 `jev_router/policy.py` 阈值的展示用副本，只用来画刻度线——仪表盘报告的结论永远是 API 返回的 `policy_outcome`，所以阈值副本即使漂移也不会改变结论，只会让刻度线失真；它们集中在一个模块里，就是为了让这种漂移只有一处可修。
 
 `src/lib/viewModel.ts` 是纯函数层：状态色调、步骤分支、概率表、分数读数、验证读数和决策链都在这里决定，组件只负责排版和着色。三个 `noul` 概率按 0–1 画成带阈值刻度的 meter；`route_risk` 和 `quality_score` 是核心包不做归一化的 provider score，因此只显示原始数值加有序色阶，并标注刻度范围（`scale 0–4`、`scale 0–3`），绝不画成 0–1 概率条。缺失字段渲染成「—」而不是 0：`NULL` 和真实的 `0.0` 是两件事。
 
 实时刷新由 `<LiveRefresh>` 完成：run 处于存活状态时每 2 秒 `router.refresh()` 一次，到达终态后自动停止。待确认和待输入由 server action 应答，`409` 说明 run 在渲染和点击之间已经继续前进，此时把 API 的原话显示出来，而不是假装应答成功。
+
+`/evals` 与 `/evals/[runId]` 是只读页面：eval run 是已结束的记录，不轮询、不起跑。列表页展示最新一次的聚合卡片，详情页一行一个用例并排两个路由的动作、延迟与 token。视图模型对“模式产生不了的指标”直接省略而不是画 0，对路由出错的行显示错误且不计入分歧——否则一致率会被提供方故障拉低。
 
 ## Eval
 
@@ -126,8 +130,11 @@ CLI：`uv run python -m evals --mode jev|llm|compare [--limit N] [--json-out PAT
 apps/api -> jev_router -> provider/tool protocols
 apps/web -> apps/api HTTP contract
  evals -> jev_router public interfaces
+ evals/cli -> apps/api HTTP contract (投递报告)
  tests -> modules under test
 ```
+
+`evals/` 的库模块（cases、runner、metrics、llm_router、registry、report）只依赖 `jev_router` 公开接口；`evals/cli.py` 是唯一跨层模块，通过 HTTP 把报告投递给 `apps/api`，不 import 它。
 
 核心包避免依赖 API 框架、数据库实现和具体模型 SDK。外部依赖通过小型 adapter 注入，便于离线测试。
 
@@ -139,6 +146,8 @@ apps/web -> apps/api HTTP contract
 - API 测试：请求 schema、错误状态码、确认流程、LLM 委托装配及 trace 输出。
 - Web 测试：vitest 覆盖视图模型与 API 客户端（注入 fetch），加上 `tsc --noEmit` 与 `next build`。
 - Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。用例集本身由测试校验，loader 规则与提交的 `cases.json` 不会悄悄漂移。
+- 存储与 API：临时 SQLite 文件验证 eval run 往返、重复记录幂等、载荷版本拒绝，以及 version-1 数据库升级后仍可写读；`TestClient` 验证 `POST/GET /evals` 的状态码与 round-trip。
+- CLI：stub router 驱动 `main()`，覆盖退出码、报告信封与 `--api` 投递（MockTransport）。
 
 对概率策略至少覆盖阈值等于边界、字段缺失、无效概率和候选工具不可用等情况。真实服务 smoke test 应独立、显式启用，避免普通测试产生费用或副作用。
 

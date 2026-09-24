@@ -9,6 +9,8 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+import httpx
+
 from evals.cases import CaseFileError, load_cases
 from evals.llm_router import LLMRouter
 from evals.metrics import TokenStats
@@ -22,6 +24,9 @@ from jev_router.router import Router
 EXIT_OK = 0
 EXIT_CASE_ERRORS = 1
 EXIT_CONFIGURATION = 2
+EXIT_DELIVERY = 3
+
+API_TIMEOUT_SECONDS = 30.0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--json-out",
         default=None,
         help="write the versioned report to this path instead of only printing a summary",
+    )
+    parser.add_argument(
+        "--api",
+        default=None,
+        help="post the finished report to this API base URL (e.g. http://127.0.0.1:8000)",
     )
     return parser
 
@@ -92,8 +102,53 @@ def main(argv: Sequence[str] | None = None) -> int:
     errors = sum(1 for outcome in report.outcomes if outcome.error is not None)
     if errors:
         print(f"{errors} case(s) errored", file=sys.stderr)
-        return EXIT_CASE_ERRORS
-    return EXIT_OK
+
+    if args.api:
+        delivery = _post_report(args.api, report)
+        if delivery is not None:
+            return delivery
+    return EXIT_CASE_ERRORS if errors else EXIT_OK
+
+
+def _post_report(api: str, report: EvalReport) -> int | None:
+    """POST the report to a running API. ``None`` means it was accepted.
+
+    The body is the report envelope's ``data``, which is exactly what
+    ``POST /evals`` validates, so a refusal means the report and the API disagree
+    — reported with the API's own message rather than guessed at.
+    """
+    body = report_to_dict(report)["data"]
+    try:
+        with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+            response = client.post(api.rstrip("/") + "/evals", json=body)
+    except httpx.HTTPError as exc:
+        print(f"the API could not be reached: {exc}", file=sys.stderr)
+        return EXIT_DELIVERY
+    if response.is_error:
+        print(
+            f"the API refused the report: {response.status_code} {_problem(response)}",
+            file=sys.stderr,
+        )
+        return EXIT_DELIVERY
+    print(f"report recorded as {response.json().get('run_id', report.run_id)}")
+    return None
+
+
+def _problem(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text[:200]
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        return "; ".join(
+            f"{'.'.join(str(part) for part in entry.get('loc', []))}: {entry.get('msg')}"
+            for entry in detail
+            if isinstance(entry, dict)
+        )
+    return response.text[:200]
 
 
 def _jev_router(model: str | None) -> Router:

@@ -9,11 +9,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from apps.api.schemas import (
+    ComparisonMetricsPayload,
+    EvalCaseOutcomePayload,
+    EvalRunView,
+    RecordEvalRunRequest,
+)
 from jev_router.runner import RunResult, StepTrace
 from jev_router.serialization import jsonable
 from jev_router.verifier import VerificationDecision
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PAYLOAD_VERSION = 1
 
 # Stored status for a run whose traces are still being written; it is replaced by
@@ -67,6 +73,24 @@ CREATE TABLE IF NOT EXISTS evaluations (
 
 CREATE INDEX IF NOT EXISTS agent_steps_task ON agent_steps (task_id, step);
 CREATE INDEX IF NOT EXISTS evaluations_task ON evaluations (task_id, step);
+
+CREATE TABLE IF NOT EXISTS eval_runs (
+    run_id TEXT PRIMARY KEY,
+    mode TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    metrics TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS eval_case_results (
+    run_id TEXT NOT NULL,
+    case_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (run_id, case_id, mode),
+    FOREIGN KEY (run_id) REFERENCES eval_runs (run_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS eval_case_results_run ON eval_case_results (run_id);
 """
 
 
@@ -84,6 +108,16 @@ class TaskRecord:
     created_at: str
     updated_at: str
     final_state: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class EvalRunRecord:
+    """A stored eval run without its rows, for the list view."""
+
+    run_id: str
+    mode: str
+    created_at: str
+    case_count: int
 
 
 def _now() -> str:
@@ -422,4 +456,100 @@ class TraceStore:
                 )
             )
         return tuple(traces)
+
+    def record_eval_run(self, request: RecordEvalRunRequest) -> None:
+        """Persist a finished eval run. Safe to call repeatedly for the same run id.
+
+        The metrics live on the run row and every case outcome gets its own row,
+        so a compare run's 100 rows stay queryable without unpacking one blob.
+        Re-recording replaces the run's rows rather than adding to them.
+        """
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO eval_runs (run_id, mode, created_at, metrics)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (run_id) DO UPDATE SET
+                    mode = excluded.mode,
+                    created_at = excluded.created_at,
+                    metrics = excluded.metrics
+                """,
+                (
+                    request.run_id,
+                    request.mode,
+                    request.created_at,
+                    _encode(request.metrics.model_dump(mode="json")),
+                ),
+            )
+            self._connection.execute(
+                "DELETE FROM eval_case_results WHERE run_id = ?", (request.run_id,)
+            )
+            for outcome in request.outcomes:
+                self._connection.execute(
+                    """
+                    INSERT INTO eval_case_results (run_id, case_id, mode, payload)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        request.run_id,
+                        outcome.case_id,
+                        outcome.mode,
+                        _encode(outcome.model_dump(mode="json")),
+                    ),
+                )
+
+    def list_eval_runs(self, *, limit: int = 50) -> tuple[EvalRunRecord, ...]:
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        rows = self._connection.execute(
+            """
+            SELECT r.run_id, r.mode, r.created_at,
+                   (SELECT COUNT(DISTINCT case_id) FROM eval_case_results c
+                    WHERE c.run_id = r.run_id)
+            FROM eval_runs r
+            ORDER BY r.created_at DESC, r.run_id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return tuple(
+            EvalRunRecord(
+                run_id=row[0], mode=row[1], created_at=row[2], case_count=row[3]
+            )
+            for row in rows
+        )
+
+    def load_eval_run(self, run_id: str) -> EvalRunView | None:
+        """Rebuild a stored run, newest nothing: rows come back in case order.
+
+        Ordering is `(case_id, mode)` so both routers' rows for one case sit next
+        to each other and two runs of the same case set line up row for row.
+        """
+        row = self._connection.execute(
+            "SELECT run_id, mode, created_at, metrics FROM eval_runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        outcome_rows = self._connection.execute(
+            """
+            SELECT payload FROM eval_case_results
+            WHERE run_id = ? ORDER BY case_id, mode
+            """,
+            (run_id,),
+        ).fetchall()
+        outcomes = [
+            EvalCaseOutcomePayload.model_validate(_decode(item[0], "eval case outcome"))
+            for item in outcome_rows
+        ]
+        return EvalRunView(
+            run_id=row[0],
+            mode=row[1],
+            created_at=row[2],
+            case_count=len({outcome.case_id for outcome in outcomes}),
+            metrics=ComparisonMetricsPayload.model_validate(
+                _decode(row[3], "eval metrics")
+            ),
+            outcomes=outcomes,
+        )
 

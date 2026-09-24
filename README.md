@@ -2,7 +2,7 @@
 
 让 LLM 理解和拆解任务，让 Jev 在有限动作中做带概率的路由决策，再由显式策略控制执行。
 
-> 核心包、API 层与 eval 运行器已完成十一个阶段（Jev client、LLM client、工具注册表、Router、Policy Engine、任务状态与预算、Verifier、受限 Runner、trace 持久化、HTTP 边界、Web trace 仪表盘、Eval Runner 与 LLM 基线）；eval 结果的持久化与对比仪表盘尚未实现。
+> 十二个阶段全部完成：Jev client、LLM client、工具注册表、Router、Policy Engine、任务状态与预算、Verifier、受限 Runner、trace 持久化、HTTP 边界、Web trace 仪表盘、Eval Runner 与 LLM 基线，以及 eval 结果的持久化与对比仪表盘。
 
 ## 项目结构
 
@@ -48,9 +48,7 @@ Python 核心负责状态、路由、策略、执行循环和验证；API 层负
 
 ## 开发顺序
 
-已完成：Jev client、LLM client、工具协议与 registry、Policy Engine、router、任务状态与预算、verifier、受限 runner、trace 持久化、`apps/api` 的 HTTP 边界、`apps/web` 的 trace 仪表盘，以及 `evals/` 的固定用例集、LLM 基线路由、运行器、指标和 CLI。
-
-尚未实现：eval 结果的持久化与对比仪表盘。保持核心逻辑可在不启动 Web 的情况下测试。
+已完成：Jev client、LLM client、工具协议与 registry、Policy Engine、router、任务状态与预算、verifier、受限 runner、trace 持久化、`apps/api` 的 HTTP 边界、`apps/web` 的 trace 仪表盘、`evals/` 的固定用例集、LLM 基线路由、运行器、指标和 CLI，以及 eval 结果的持久化（`POST/GET /evals`）与对比仪表盘（`/evals`、`/evals/{run_id}`）。保持核心逻辑可在不启动 Web 的情况下测试。
 
 ## 运行评测
 
@@ -58,7 +56,7 @@ Python 核心负责状态、路由、策略、执行循环和验证；API 层负
 uv run python -m evals --mode compare --json-out evals-report.json
 ```
 
-`--mode` 可选 `jev`、`llm`、`compare`；凭证从环境变量读取（`JEV_API_KEY`/`JEV_MODEL`、`LLM_API_KEY`/`LLM_MODEL`），缺任何一个都会在跑用例之前失败。有用例出错时退出码为 1。评测是显式动作：测试套件只使用 stub，不产生真实 provider 调用。
+`--mode` 可选 `jev`、`llm`、`compare`；凭证从环境变量读取（`JEV_API_KEY`/`JEV_MODEL`、`LLM_API_KEY`/`LLM_MODEL`），缺任何一个都会在跑用例之前失败。加 `--api http://127.0.0.1:8000` 会把报告投递给运行中的 API，落入 `eval_runs` / `eval_case_results` 两张表，仪表盘的 `/evals` 页即可阅读。退出码：0 干净，1 有用例出错，2 配置或用例文件问题，3 报告未能投递。评测是显式动作：测试套件只使用 stub，不产生真实 provider 调用。
 
 ## 文档
 
@@ -69,8 +67,7 @@ uv run python -m evals --mode compare --json-out evals-report.json
 
 ## 状态
 
-`jev_router/` 已实现并可离线测试：Jev client（`clients/jev.py`）、LLM client（`clients/llm.py`）、五个工具与注册表、Router、Policy Engine、不可变任务状态与执行预算、Verifier，以及把它们接成有界循环的 Runner。`RouteDecision` 携带 provider 返回的 token 用量，供对比指标使用。`apps/api/` 提供 SQLite trace 持久化和 FastAPI HTTP 边界（提交任务、确认待办、提供输入、查询 trace）；配置了 LLM 时才装配 `delegate_to_llm` 委托，否则保持 fail closed。`apps/web/` 是 Next.js trace 仪表盘：运行列表、每步的 Jev 信号/策略结果/执行结果/延迟，以及待确认与待输入的人工应答；所有 API 调用都发生在服务端，浏览器拿不到凭证。`evals/` 用 50 条版本化用例重放同一套 Router/PolicyEngine，并用候选集一致的 LLM 基线对比，产出一致率、匹配率、升级/确认率、延迟与 token 指标。`uv run pytest` 现有 214 项测试全部通过，ruff 与 strict mypy 干净；测试使用 httpx mock transport、TestClient 和临时数据库文件，不需要真实凭证。Web 层另有 `tsc --noEmit`、eslint、vitest 和 `next build`。
+`jev_router/` 已实现并可离线测试：Jev client（`clients/jev.py`）、LLM client（`clients/llm.py`）、五个工具与注册表、Router、Policy Engine、不可变任务状态与执行预算、Verifier，以及把它们接成有界循环的 Runner。`RouteDecision` 携带 provider 返回的 token 用量，供对比指标使用。`apps/api/` 提供 SQLite trace 持久化和 FastAPI HTTP 边界（提交任务、确认待办、提供输入、查询 trace）；配置了 LLM 时才装配 `delegate_to_llm` 委托，否则保持 fail closed。`apps/web/` 是 Next.js trace 仪表盘：运行列表、每步的 Jev 信号/策略结果/执行结果/延迟，以及待确认与待输入的人工应答；所有 API 调用都发生在服务端，浏览器拿不到凭证。`evals/` 用 50 条版本化用例重放同一套 Router/PolicyEngine，并用候选集一致的 LLM 基线对比，产出一致率、匹配率、升级/确认率、延迟与 token 指标；报告可落库并通过 `/evals` 页阅读。`uv run pytest` 现有 233 项测试全部通过，ruff 与 strict mypy 干净；测试使用 httpx mock transport、TestClient 和临时数据库文件，不需要真实凭证。Web 层另有 `tsc --noEmit`、eslint、vitest 和 `next build`。
 
 TypeSafe API 的请求/响应 schema 已在第一阶段依据官方文档确认，仅覆盖 `POST /v1/systemone` 与 `noul`、`choice`、`score` 三种 typed question；LLM 适配器覆盖 Anthropic Messages API 的 `POST /v1/messages`。若供应商调整接口，应以官方文档为准重新核对，不应从示例推断为稳定契约。
 
-后续按开发顺序推进：eval 结果的持久化与对比仪表盘。

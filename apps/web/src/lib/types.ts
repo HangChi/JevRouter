@@ -92,3 +92,92 @@ export interface TraceListResponse {
   task_id: string;
   traces: TraceView[];
 }
+
+/**
+ * One case outcome from an eval run, mirrored from `apps/api/schemas.py`.
+ *
+ * The policy fields are `null` for the LLM baseline because it produces no
+ * probabilities — an absent escalation and a real `false` are different facts
+ * and must not render the same way.
+ */
+export interface EvalCaseOutcome {
+  case_id: string;
+  goal: string;
+  expected_action: string;
+  allowed_actions: string[];
+  requires_confirmation: boolean;
+  mode: string;
+  action: string | null;
+  matched_expected: boolean;
+  matched_allowed: boolean;
+  succeeded: boolean;
+  policy_outcome: string | null;
+  escalated: boolean | null;
+  confirmation_requested: boolean | null;
+  latency_ms: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  error: string | null;
+}
+
+export interface EvalLatency {
+  mean_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+}
+
+export interface EvalTokenStats {
+  mean: number;
+  total: number;
+}
+
+export interface EvalModeMetrics {
+  mode: string;
+  case_count: number;
+  error_count: number;
+  expected_match_count: number;
+  allowed_match_count: number;
+  success_count: number;
+  escalation_count: number | null;
+  confirmation_expected_count: number | null;
+  confirmation_requested_count: number | null;
+  confirmation_match_count: number | null;
+  expected_match_rate: number;
+  allowed_match_rate: number;
+  success_rate: number;
+  error_rate: number;
+  escalation_rate: number | null;
+  latency: EvalLatency;
+  input_tokens: EvalTokenStats | null;
+  output_tokens: EvalTokenStats | null;
+}
+
+export interface EvalComparisonMetrics {
+  jev: EvalModeMetrics | null;
+  llm: EvalModeMetrics | null;
+  agreement_count: number | null;
+  compared_count: number | null;
+  agreement_rate: number | null;
+  disagreement_case_ids: string[];
+}
+
+export interface EvalRunSummary {
+  run_id: string;
+  mode: string;
+  created_at: string;
+  case_count: number;
+}
+
+export interface EvalRunListResponse {
+  runs: EvalRunSummary[];
+}
+
+export interface EvalRunView {
+  run_id: string;
+  mode: string;
+  created_at: string;
+  case_count: number;
+  metrics: EvalComparisonMetrics;
+  outcomes: EvalCaseOutcome[];
+}

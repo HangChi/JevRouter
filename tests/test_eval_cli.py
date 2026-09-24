@@ -119,3 +119,73 @@ def test_real_routers_are_constructible_without_credentials(monkeypatch: Any) ->
         pass
     else:  # pragma: no cover - defensive
         raise AssertionError("a missing credential must fail closed")
+
+
+def test_the_api_posts_the_report_envelope(monkeypatch: Any, tmp_path: Any) -> None:
+    import httpx
+
+    from evals.report import REPORT_VERSION
+
+    patch_routers(monkeypatch)
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(201, json={"run_id": "run-1", "case_count": 3})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        cli.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler)),
+    )
+    code = cli.main(["--mode", "compare", "--limit", "3", "--api", "http://api.test/"])
+
+    assert code == cli.EXIT_OK
+    assert captured["path"] == "/evals"
+    body = captured["body"]
+    assert "version" not in body, "the API takes the envelope's data, not the envelope"
+    assert body["mode"] == "compare"
+    assert len(body["outcomes"]) == 6
+    assert body["metrics"]["jev"]["case_count"] == 3
+    assert REPORT_VERSION == 1
+
+
+def test_an_unreachable_api_fails_the_delivery(monkeypatch: Any) -> None:
+    import httpx
+
+    patch_routers(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        cli.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler)),
+    )
+    code = cli.main(["--mode", "jev", "--limit", "1", "--api", "http://api.test"])
+
+    assert code == cli.EXIT_DELIVERY
+
+
+def test_a_refused_report_reports_the_api_message(monkeypatch: Any, capsys: Any) -> None:
+    import httpx
+
+    patch_routers(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"detail": [{"loc": ["body", "mode"], "msg": "unknown"}]})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        cli.httpx,
+        "Client",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler)),
+    )
+    code = cli.main(["--mode", "jev", "--limit", "1", "--api", "http://api.test"])
+
+    assert code == cli.EXIT_DELIVERY
+    assert "body.mode: unknown" in capsys.readouterr().err

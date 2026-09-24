@@ -9,9 +9,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from apps.api.config import Settings
 from apps.api.schemas import (
     ConfirmRequest,
+    EvalRunListResponse,
+    EvalRunSummary,
+    EvalRunView,
     PendingConfirmationView,
     PendingInputView,
     ProvideInputRequest,
+    RecordEvalRunRequest,
+    RecordEvalRunResponse,
     SubmitTaskRequest,
     SubmitTaskResponse,
     TaskListResponse,
@@ -25,6 +30,7 @@ from apps.api.storage import TraceStore
 from jev_router.tools import CalculatorTool, MockEmailTool, ToolRegistry, WriteFileTool
 
 DEFAULT_TASK_LIMIT = 50
+DEFAULT_EVAL_LIMIT = 20
 
 
 def default_registry(settings: Settings) -> ToolRegistry:
@@ -83,6 +89,10 @@ def create_app(
         service_instance: TaskService = request.app.state.service
         return service_instance
 
+    def get_store(request: Request) -> TraceStore:
+        store: TraceStore = request.app.state.store
+        return store
+
     @app.post("/tasks", status_code=status.HTTP_202_ACCEPTED, response_model=SubmitTaskResponse)
     async def submit_task(
         body: SubmitTaskRequest, current: TaskService = Depends(get_service)
@@ -134,6 +144,41 @@ def create_app(
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "the task is not awaiting user input"
             ) from exc
+
+    @app.post("/evals", status_code=status.HTTP_201_CREATED, response_model=RecordEvalRunResponse)
+    async def record_eval_run(
+        body: RecordEvalRunRequest, store: TraceStore = Depends(get_store)
+    ) -> RecordEvalRunResponse:
+        store.record_eval_run(body)
+        return RecordEvalRunResponse(
+            run_id=body.run_id,
+            case_count=len({outcome.case_id for outcome in body.outcomes}),
+        )
+
+    @app.get("/evals", response_model=EvalRunListResponse)
+    async def list_eval_runs(
+        limit: int = DEFAULT_EVAL_LIMIT, store: TraceStore = Depends(get_store)
+    ) -> EvalRunListResponse:
+        if limit < 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "limit must be positive")
+        return EvalRunListResponse(
+            runs=[
+                EvalRunSummary(
+                    run_id=record.run_id,
+                    mode=record.mode,
+                    created_at=record.created_at,
+                    case_count=record.case_count,
+                )
+                for record in store.list_eval_runs(limit=limit)
+            ]
+        )
+
+    @app.get("/evals/{run_id}", response_model=EvalRunView)
+    async def get_eval_run(run_id: str, store: TraceStore = Depends(get_store)) -> EvalRunView:
+        view = store.load_eval_run(run_id)
+        if view is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "eval run not found")
+        return view
 
     return app
 

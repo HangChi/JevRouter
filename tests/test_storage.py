@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from support import TEST_MODEL, FakeJev, StubResolver, route_answers, verify_answers
+from support import (
+    TEST_MODEL,
+    FakeJev,
+    StubResolver,
+    eval_run,
+    route_answers,
+    verify_answers,
+)
 
 from apps.api.storage import (
     PAYLOAD_VERSION,
@@ -330,3 +337,102 @@ async def test_no_credential_reaches_the_database(tmp_path: Path) -> None:
     assert fake.route_calls() == 1
     assert fake.verify_calls() == 1
     assert secret.encode() not in database.read_bytes()
+
+
+def test_an_eval_run_round_trips(store: TraceStore) -> None:
+    store.record_eval_run(eval_run())
+
+    view = store.load_eval_run("run-1")
+
+    assert view is not None
+    assert view.run_id == "run-1"
+    assert view.mode == "compare"
+    assert view.case_count == 2
+    assert view.metrics.agreement_rate == 0.0
+    assert view.metrics.jev is not None
+    assert view.metrics.jev.expected_match_rate == 1.0
+    assert view.metrics.llm is not None
+    assert view.metrics.llm.escalation_count is None
+    assert [(o.case_id, o.mode) for o in view.outcomes] == [
+        ("case-1", "jev"),
+        ("case-1", "llm"),
+        ("case-2", "jev"),
+        ("case-2", "llm"),
+    ]
+    assert view.outcomes[1].action == "web_search"
+    assert view.outcomes[1].input_tokens == 10
+
+
+def test_recording_the_same_eval_run_replaces_its_rows(store: TraceStore) -> None:
+    store.record_eval_run(eval_run())
+    store.record_eval_run(eval_run(case_ids=("case-9",)))
+
+    view = store.load_eval_run("run-1")
+
+    assert view is not None
+    assert view.case_count == 1
+    assert [o.case_id for o in view.outcomes] == ["case-9", "case-9"]
+
+
+def test_eval_runs_are_listed_newest_first(store: TraceStore) -> None:
+    store.record_eval_run(
+        eval_run("run-old", case_ids=("case-1",), created_at="2026-09-23T00:00:00+00:00")
+    )
+    store.record_eval_run(
+        eval_run(
+            "run-new",
+            case_ids=("case-1", "case-2", "case-3"),
+            created_at="2026-09-24T00:00:00+00:00",
+        )
+    )
+
+    listed = store.list_eval_runs()
+
+    assert [record.run_id for record in listed] == ["run-new", "run-old"]
+    assert [record.case_count for record in listed] == [3, 1]
+    assert listed[0].mode == "compare"
+
+
+def test_listing_eval_runs_respects_the_limit(store: TraceStore) -> None:
+    for index in range(3):
+        store.record_eval_run(eval_run(f"run-{index}", case_ids=("case-1",)))
+
+    assert len(store.list_eval_runs(limit=2)) == 2
+    with pytest.raises(ValueError, match="limit must be positive"):
+        store.list_eval_runs(limit=0)
+
+
+def test_an_unknown_eval_run_reads_as_missing(store: TraceStore) -> None:
+    assert store.load_eval_run("nope") is None
+    assert store.list_eval_runs() == ()
+
+
+def test_a_tampered_eval_payload_is_refused(store: TraceStore) -> None:
+    store.record_eval_run(eval_run())
+    store._connection.execute(
+        "UPDATE eval_runs SET metrics = ? WHERE run_id = ?",
+        (json.dumps({"version": 99, "data": {}}), "run-1"),
+    )
+    store._connection.commit()
+
+    with pytest.raises(StorageError, match="payload version 99"):
+        store.load_eval_run("run-1")
+
+
+def test_a_version_one_database_still_opens_and_gains_the_tables(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE tasks (task_id TEXT PRIMARY KEY, goal TEXT NOT NULL, status TEXT NOT NULL,
+                            step INTEGER NOT NULL, diagnostic TEXT, created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL, final_state TEXT NOT NULL);
+        PRAGMA user_version = 1;
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    with TraceStore(path) as store:
+        store.record_eval_run(eval_run())
+        assert store.load_eval_run("run-1") is not None

@@ -239,3 +239,242 @@ describe("formatters", () => {
     expect(formatDuration(-1)).toBe(ABSENT);
   });
 });
+
+import {
+  ABSENT as EVAL_ABSENT,
+  agreementCard,
+  comparisonCardSets,
+  comparisonRows,
+  formatRate,
+  formatTokens,
+  modeCardSet,
+  outcomeAction,
+  rateTone,
+} from "./viewModel";
+import type { EvalCaseOutcome, EvalComparisonMetrics, EvalModeMetrics } from "./types";
+
+function jevMetrics(overrides: Partial<EvalModeMetrics> = {}): EvalModeMetrics {
+  return {
+    mode: "jev",
+    case_count: 50,
+    error_count: 0,
+    expected_match_count: 44,
+    allowed_match_count: 47,
+    success_count: 41,
+    escalation_count: 4,
+    confirmation_expected_count: 17,
+    confirmation_requested_count: 15,
+    confirmation_match_count: 45,
+    expected_match_rate: 0.88,
+    allowed_match_rate: 0.94,
+    success_rate: 0.82,
+    error_rate: 0,
+    escalation_rate: 0.08,
+    latency: { mean_ms: 118.4, p50_ms: 104, p95_ms: 210, max_ms: 402 },
+    input_tokens: { mean: 423.2, total: 21160 },
+    output_tokens: { mean: 12.1, total: 605 },
+    ...overrides,
+  };
+}
+
+function llmMetrics(overrides: Partial<EvalModeMetrics> = {}): EvalModeMetrics {
+  return {
+    mode: "llm",
+    case_count: 50,
+    error_count: 0,
+    expected_match_count: 41,
+    allowed_match_count: 45,
+    success_count: 41,
+    escalation_count: null,
+    confirmation_expected_count: null,
+    confirmation_requested_count: null,
+    confirmation_match_count: null,
+    expected_match_rate: 0.82,
+    allowed_match_rate: 0.9,
+    success_rate: 0.82,
+    error_rate: 0,
+    escalation_rate: null,
+    latency: { mean_ms: 1642.7, p50_ms: 1500, p95_ms: 2800, max_ms: 3900 },
+    input_tokens: { mean: 612.4, total: 30620 },
+    output_tokens: { mean: 97.3, total: 4865 },
+    ...overrides,
+  };
+}
+
+function comparison(overrides: Partial<EvalComparisonMetrics> = {}): EvalComparisonMetrics {
+  return {
+    jev: jevMetrics(),
+    llm: llmMetrics(),
+    agreement_count: 46,
+    compared_count: 50,
+    agreement_rate: 0.92,
+    disagreement_case_ids: ["case-3", "case-17", "case-31", "case-44"],
+    ...overrides,
+  };
+}
+
+function outcome(overrides: Partial<EvalCaseOutcome> = {}): EvalCaseOutcome {
+  return {
+    case_id: "case-1",
+    goal: "what is 2 + 2?",
+    expected_action: "calculator",
+    allowed_actions: ["calculator"],
+    requires_confirmation: false,
+    mode: "jev",
+    action: "calculator",
+    matched_expected: true,
+    matched_allowed: true,
+    succeeded: true,
+    policy_outcome: "execute",
+    escalated: false,
+    confirmation_requested: false,
+    latency_ms: 104,
+    input_tokens: 10,
+    output_tokens: 5,
+    error: null,
+    ...overrides,
+  };
+}
+
+describe("modeCardSet", () => {
+  it("shows every count next to the case count it is a share of", () => {
+    const cards = modeCardSet(jevMetrics()).cards;
+    const expected = cards.find((card) => card.key === "expected");
+    expect(expected?.value).toBe("88.0%");
+    expect(expected?.detail).toBe("44 of 50 chose the expected action");
+    expect(expected?.tone).toBe("neutral");
+  });
+
+  it("formats latency with its percentiles and tokens with their totals", () => {
+    const cards = modeCardSet(jevMetrics()).cards;
+    expect(cards.find((card) => card.key === "latency")?.value).toBe("118 ms");
+    expect(cards.find((card) => card.key === "latency")?.detail).toBe(
+      "p50 104 ms · p95 210 ms · max 402 ms",
+    );
+    expect(cards.find((card) => card.key === "tokens")?.value).toBe("423.2 / 12.1");
+    expect(cards.find((card) => card.key === "tokens")?.detail).toBe(
+      "in 21160 · out 605 across 50 cases",
+    );
+  });
+
+  it("omits the policy cards the LLM baseline cannot produce", () => {
+    const keys = modeCardSet(llmMetrics()).cards.map((card) => card.key);
+    expect(keys).not.toContain("escalated");
+    expect(keys).not.toContain("confirmation");
+    expect(keys).toContain("expected");
+  });
+
+  it("describes the baseline's success without confirmation wording", () => {
+    const baseline = modeCardSet(llmMetrics()).cards.find((card) => card.key === "success");
+    expect(baseline?.detail).toBe("41 of 50 chose an acceptable action");
+    const jev = modeCardSet(jevMetrics()).cards.find((card) => card.key === "success");
+    expect(jev?.detail).toBe("41 of 50 matched and confirmed as the case required");
+  });
+
+  it("labels the baseline as the baseline", () => {
+    expect(modeCardSet(llmMetrics()).label).toBe("LLM baseline");
+    expect(modeCardSet(jevMetrics()).label).toBe("Jev");
+  });
+
+  it("adds an error card only when cases errored", () => {
+    expect(modeCardSet(jevMetrics()).cards.map((card) => card.key)).not.toContain("errors");
+    const withErrors = modeCardSet(jevMetrics({ error_count: 3, error_rate: 0.06 })).cards;
+    expect(withErrors.find((card) => card.key === "errors")?.detail).toBe("3 of 50 cases errored");
+  });
+
+  it("reports absent token usage rather than zeros", () => {
+    const cards = modeCardSet(
+      jevMetrics({ input_tokens: null, output_tokens: null }),
+    ).cards;
+    expect(cards.find((card) => card.key === "tokens")?.value).toBe(EVAL_ABSENT);
+    expect(cards.find((card) => card.key === "tokens")?.detail).toBe(
+      "the provider reported no usage",
+    );
+  });
+});
+
+describe("comparisonCardSets", () => {
+  it("lists Jev first and skips a mode the run did not use", () => {
+    expect(comparisonCardSets(comparison()).map((set) => set.mode)).toEqual(["jev", "llm"]);
+    expect(comparisonCardSets(comparison({ llm: null })).map((set) => set.mode)).toEqual(["jev"]);
+    expect(comparisonCardSets(comparison({ jev: null, llm: null }))).toEqual([]);
+  });
+});
+
+describe("agreementCard", () => {
+  it("reports the paired count and the shared actions", () => {
+    const card = agreementCard(comparison());
+    expect(card?.value).toBe("92.0%");
+    expect(card?.detail).toBe("46 of 50 compared cases named the same action");
+    expect(card?.tone).toBe("good");
+  });
+
+  it("is absent when the two routers were never compared", () => {
+    expect(agreementCard(comparison({ agreement_rate: null, compared_count: null }))).toBeNull();
+  });
+
+  it("distinguishes a real zero from never compared", () => {
+    expect(agreementCard(comparison({ agreement_rate: 0, agreement_count: 0 }))?.value).toBe("0.0%");
+  });
+});
+
+describe("comparisonRows", () => {
+  it("pairs both routers per case in case order", () => {
+    const rows = comparisonRows([
+      outcome({ case_id: "case-1", mode: "jev" }),
+      outcome({ case_id: "case-1", mode: "llm", action: "web_search", policy_outcome: null }),
+      outcome({ case_id: "case-2", mode: "jev" }),
+      outcome({ case_id: "case-2", mode: "llm", action: "calculator", policy_outcome: null }),
+    ]);
+    expect(rows.map((row) => row.caseId)).toEqual(["case-1", "case-2"]);
+    expect(rows[0].agreed).toBe(false);
+    expect(rows[1].agreed).toBe(true);
+    expect(rows[0].expectedAction).toBe("calculator");
+  });
+
+  it("does not count a router error as a disagreement", () => {
+    const rows = comparisonRows([
+      outcome({ case_id: "case-1", mode: "jev", action: null, error: "http: down" }),
+      outcome({ case_id: "case-1", mode: "llm", action: "calculator", policy_outcome: null }),
+    ]);
+    expect(rows[0].agreed).toBeNull();
+  });
+
+  it("renders a one-sided run with the missing side absent", () => {
+    const rows = comparisonRows([outcome({ mode: "jev" })]);
+    expect(rows[0].jev?.action).toBe("calculator");
+    expect(rows[0].llm).toBeNull();
+    expect(outcomeAction(rows[0].llm)).toBe(EVAL_ABSENT);
+  });
+});
+
+describe("outcomeAction", () => {
+  it("shows the action, or the error that replaced it", () => {
+    expect(outcomeAction(outcome())).toBe("calculator");
+    expect(outcomeAction(outcome({ action: null, error: "http: provider down" }))).toBe(
+      "error: http: provider down",
+    );
+    expect(outcomeAction(outcome({ action: null, error: null }))).toBe(EVAL_ABSENT);
+    expect(outcomeAction(null)).toBe(EVAL_ABSENT);
+  });
+});
+
+describe("eval formatters", () => {
+  it("formats rates and keeps an absent rate absent", () => {
+    expect(formatRate(0.88)).toBe("88.0%");
+    expect(formatRate(0)).toBe("0.0%");
+    expect(formatRate(null)).toBe(EVAL_ABSENT);
+  });
+
+  it("formats a token pair", () => {
+    expect(formatTokens(423, 12)).toBe("423 / 12");
+    expect(formatTokens(null, 12)).toBe(EVAL_ABSENT);
+  });
+
+  it("tones a rate by coarse bands", () => {
+    expect(rateTone(0.95)).toBe("good");
+    expect(rateTone(0.8)).toBe("neutral");
+    expect(rateTone(0.4)).toBe("bad");
+    expect(rateTone(null)).toBe("neutral");
+  });
+});

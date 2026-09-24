@@ -7,7 +7,7 @@ import {
   RISK_THRESHOLD,
   ROUTE_CONFIDENCE_THRESHOLD,
 } from "./thresholds";
-import type { TraceView } from "./types";
+import type { EvalComparisonMetrics, EvalModeMetrics, EvalCaseOutcome, TraceView } from "./types";
 
 /**
  * Pure view model over the API's transport types.
@@ -342,4 +342,242 @@ function isFiniteNumber(value: unknown): value is number {
 /** A 0-based index across `levelCount` levels, clamped so an odd score stays drawable. */
 function levelOf(score: number, levelCount: number): number {
   return Math.min(Math.max(Math.round(score), 0), levelCount - 1);
+}
+
+/** Which router a metric belongs to, for labelling cards and table columns. */
+export type EvalMode = "jev" | "llm";
+
+/** A rate the mode cannot produce, rendered as absent rather than zero. */
+export const ABSENT_RATE = ABSENT;
+
+export interface MetricCard {
+  key: string;
+  label: string;
+  value: string;
+  /** A short explanation of what the number counts, shown under the value. */
+  detail: string;
+  tone: Tone;
+}
+
+export interface ModeCardSet {
+  mode: EvalMode;
+  label: string;
+  cards: MetricCard[];
+}
+
+/**
+ * The aggregate cards for one mode.
+ *
+ * Every count is shown next to the case count it is a share of, because "88%"
+ * hides whether that is 44 of 50 or 4 of 5. Metrics a mode cannot produce — the
+ * baseline has no policy outcome — are left out rather than shown as zero.
+ */
+export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
+  const total = metrics.case_count;
+  const cards: MetricCard[] = [
+    {
+      key: "expected",
+      label: "Expected match",
+      value: formatRate(metrics.expected_match_rate),
+      detail: `${metrics.expected_match_count} of ${total} chose the expected action`,
+      tone: rateTone(metrics.expected_match_rate),
+    },
+    {
+      key: "allowed",
+      label: "Allowed match",
+      value: formatRate(metrics.allowed_match_rate),
+      detail: `${metrics.allowed_match_count} of ${total} chose an acceptable action`,
+      tone: rateTone(metrics.allowed_match_rate),
+    },
+    {
+      key: "success",
+      label: "Success",
+      value: formatRate(metrics.success_rate),
+      // The baseline has no policy outcome, so confirmation is not part of what
+      // it can succeed at; saying so would describe a fact it cannot have.
+      detail:
+        metrics.confirmation_match_count === null
+          ? `${metrics.success_count} of ${total} chose an acceptable action`
+          : `${metrics.success_count} of ${total} matched and confirmed as the case required`,
+      tone: rateTone(metrics.success_rate),
+    },
+    {
+      key: "latency",
+      label: "Latency",
+      value: formatDuration(metrics.latency.mean_ms),
+      detail: `p50 ${formatDuration(metrics.latency.p50_ms)} · p95 ${formatDuration(
+        metrics.latency.p95_ms,
+      )} · max ${formatDuration(metrics.latency.max_ms)}`,
+      tone: "neutral",
+    },
+    {
+      key: "tokens",
+      label: "Tokens",
+      value: formatTokens(metrics.input_tokens?.mean ?? null, metrics.output_tokens?.mean ?? null),
+      detail:
+        metrics.input_tokens === null || metrics.output_tokens === null
+          ? "the provider reported no usage"
+          : `in ${metrics.input_tokens.total} · out ${metrics.output_tokens.total} across ${total} cases`,
+      tone: "neutral",
+    },
+  ];
+
+  if (metrics.escalation_rate !== null && metrics.escalation_count !== null) {
+    cards.push({
+      key: "escalated",
+      label: "Escalated",
+      value: formatRate(metrics.escalation_rate),
+      detail: `${metrics.escalation_count} of ${total} stopped automatic execution`,
+      tone: "neutral",
+    });
+  }
+  if (
+    metrics.confirmation_requested_count !== null &&
+    metrics.confirmation_match_count !== null
+  ) {
+    cards.push({
+      key: "confirmation",
+      label: "Confirmation fit",
+      value: formatRate(metrics.confirmation_match_count / total),
+      detail: `${metrics.confirmation_requested_count} asked · ${metrics.confirmation_match_count} of ${total} matched the case`,
+      tone: rateTone(metrics.confirmation_match_count / total),
+    });
+  }
+  if (metrics.error_count > 0) {
+    cards.push({
+      key: "errors",
+      label: "Errors",
+      value: formatRate(metrics.error_rate),
+      detail: `${metrics.error_count} of ${total} cases errored`,
+      tone: "bad",
+    });
+  }
+
+  return {
+    mode: metrics.mode === "llm" ? "llm" : "jev",
+    label: metrics.mode === "llm" ? "LLM baseline" : "Jev",
+    cards,
+  };
+}
+
+/** The card sets a run can show, Jev first because it is the subject. */
+export function comparisonCardSets(metrics: EvalComparisonMetrics): ModeCardSet[] {
+  const sets: ModeCardSet[] = [];
+  if (metrics.jev !== null) {
+    sets.push(modeCardSet(metrics.jev));
+  }
+  if (metrics.llm !== null) {
+    sets.push(modeCardSet(metrics.llm));
+  }
+  return sets;
+}
+
+export interface AgreementCard {
+  key: "agreement";
+  label: "Routing agreement";
+  value: string;
+  detail: string;
+  tone: Tone;
+}
+
+/**
+ * How often the two routers named the same action. It is absent unless both
+ * routers answered at least one case: "0%" and "never compared" are different
+ * statements, and only one of them is a finding.
+ */
+export function agreementCard(metrics: EvalComparisonMetrics): AgreementCard | null {
+  if (metrics.agreement_rate === null || metrics.compared_count === null) {
+    return null;
+  }
+  const compared = metrics.compared_count;
+  const agreed = metrics.agreement_count ?? 0;
+  return {
+    key: "agreement",
+    label: "Routing agreement",
+    value: formatRate(metrics.agreement_rate),
+    detail: `${agreed} of ${compared} compared cases named the same action`,
+    tone: rateTone(metrics.agreement_rate),
+  };
+}
+
+export interface ComparisonRow {
+  caseId: string;
+  goal: string;
+  expectedAction: string;
+  jev: EvalCaseOutcome | null;
+  llm: EvalCaseOutcome | null;
+  agreed: boolean | null;
+}
+
+/**
+ * One row per case, pairing both routers' outcomes.
+ *
+ * Outcomes arrive ordered by `(case_id, mode)`, so a single pass pairs them.
+ * `agreed` stays `null` when either side never answered: a router error is not a
+ * disagreement, and counting it as one would understate the agreement rate.
+ */
+export function comparisonRows(outcomes: EvalCaseOutcome[]): ComparisonRow[] {
+  const byCase = new Map<string, { jev?: EvalCaseOutcome; llm?: EvalCaseOutcome }>();
+  for (const outcome of outcomes) {
+    const entry = byCase.get(outcome.case_id) ?? {};
+    if (outcome.mode === "llm") {
+      entry.llm = outcome;
+    } else {
+      entry.jev = outcome;
+    }
+    byCase.set(outcome.case_id, entry);
+  }
+  return [...byCase.entries()].map(([caseId, entry]) => {
+    const jev = entry.jev ?? null;
+    const llm = entry.llm ?? null;
+    const agreed =
+      jev !== null && llm !== null && jev.action !== null && llm.action !== null
+        ? jev.action === llm.action
+        : null;
+    const reference = jev ?? llm;
+    return {
+      caseId,
+      goal: reference?.goal ?? "",
+      expectedAction: reference?.expected_action ?? ABSENT,
+      jev,
+      llm,
+      agreed,
+    };
+  });
+}
+
+/** The action a router reported, or the error that replaced it. */
+export function outcomeAction(outcome: EvalCaseOutcome | null): string {
+  if (outcome === null) {
+    return ABSENT;
+  }
+  if (outcome.action !== null) {
+    return outcome.action;
+  }
+  return outcome.error === null ? ABSENT : `error: ${outcome.error}`;
+}
+
+export function formatRate(value: number | null): string {
+  return isFiniteNumber(value) ? `${(value * 100).toFixed(1)}%` : ABSENT;
+}
+
+export function formatTokens(input: number | null, output: number | null): string {
+  if (!isFiniteNumber(input) || !isFiniteNumber(output)) {
+    return ABSENT;
+  }
+  return `${input} / ${output}`;
+}
+
+/** Tone for a rate: higher is better, and the bands are deliberately coarse. */
+export function rateTone(value: number | null): Tone {
+  if (!isFiniteNumber(value)) {
+    return "neutral";
+  }
+  if (value >= 0.9) {
+    return "good";
+  }
+  if (value >= 0.7) {
+    return "neutral";
+  }
+  return "bad";
 }

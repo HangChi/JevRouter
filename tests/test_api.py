@@ -11,6 +11,7 @@ from support import (
     WRITE_FILE_CANDIDATES,
     FakeJev,
     StubResolver,
+    eval_run,
     route_answers,
     verify_answers,
 )
@@ -518,3 +519,113 @@ def test_an_empty_delegation_fails_the_run(api: Any) -> None:
 
     assert body["status"] == "failed"
     assert body["diagnostic"] is not None
+
+
+def test_recording_an_eval_run_round_trips_through_the_api(api: Any) -> None:
+    request = eval_run()
+
+    with api(FakeJev()) as client:
+        posted = client.post("/evals", json=request.model_dump(mode="json"))
+        assert posted.status_code == 201
+        assert posted.json() == {"run_id": "run-1", "case_count": 2}
+
+        listed = client.get("/evals").json()
+        assert listed["runs"] == [
+            {
+                "run_id": "run-1",
+                "mode": "compare",
+                "created_at": "2026-09-24T00:00:00+00:00",
+                "case_count": 2,
+            }
+        ]
+
+        detail = client.get("/evals/run-1").json()
+
+    assert detail["run_id"] == "run-1"
+    assert detail["case_count"] == 2
+    assert detail["metrics"]["agreement_rate"] == 0.0
+    assert detail["metrics"]["jev"]["expected_match_rate"] == 1.0
+    assert [(o["case_id"], o["mode"]) for o in detail["outcomes"]] == [
+        ("case-1", "jev"),
+        ("case-1", "llm"),
+        ("case-2", "jev"),
+        ("case-2", "llm"),
+    ]
+
+
+def test_recording_the_same_eval_run_twice_is_idempotent(api: Any) -> None:
+    with api(FakeJev()) as client:
+        first = client.post("/evals", json=eval_run().model_dump(mode="json"))
+        second = client.post("/evals", json=eval_run().model_dump(mode="json"))
+        listed = client.get("/evals").json()
+
+    assert first.status_code == second.status_code == 201
+    assert len(listed["runs"]) == 1
+
+
+def test_an_unknown_eval_run_is_not_found(api: Any) -> None:
+    with api(FakeJev()) as client:
+        response = client.get("/evals/nope")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "eval run not found"
+
+
+def test_an_eval_limit_below_one_is_rejected(api: Any) -> None:
+    with api(FakeJev()) as client:
+        response = client.get("/evals?limit=0")
+
+    assert response.status_code == 400
+
+
+def test_an_unknown_eval_mode_is_rejected(api: Any) -> None:
+    body = eval_run().model_dump(mode="json")
+    body["mode"] = "telepathy"
+
+    with api(FakeJev()) as client:
+        response = client.post("/evals", json=body)
+
+    assert response.status_code == 422
+
+
+def test_outcomes_from_another_router_are_rejected(api: Any) -> None:
+    body = eval_run(mode="jev").model_dump(mode="json")
+    body["outcomes"] = [o for o in body["outcomes"] if o["mode"] == "llm"]
+
+    with api(FakeJev()) as client:
+        response = client.post("/evals", json=body)
+
+    assert response.status_code == 422
+
+
+def test_an_unpaired_compare_run_is_rejected(api: Any) -> None:
+    body = eval_run().model_dump(mode="json")
+    # The baseline never answered case-2, so the pairing is broken.
+    body["outcomes"] = [
+        o for o in body["outcomes"] if not (o["case_id"] == "case-2" and o["mode"] == "llm")
+    ]
+
+    with api(FakeJev()) as client:
+        response = client.post("/evals", json=body)
+
+    assert response.status_code == 422
+
+
+def test_an_eval_body_with_unknown_fields_is_rejected(api: Any) -> None:
+    body = eval_run().model_dump(mode="json")
+    body["surprise"] = True
+
+    with api(FakeJev()) as client:
+        response = client.post("/evals", json=body)
+
+    assert response.status_code == 422
+
+
+def test_an_empty_outcome_list_is_rejected(api: Any) -> None:
+    body = eval_run().model_dump(mode="json")
+    body["outcomes"] = []
+
+    with api(FakeJev()) as client:
+        response = client.post("/evals", json=body)
+
+    assert response.status_code == 422

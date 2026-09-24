@@ -1,4 +1,6 @@
 import type {
+  EvalRunListResponse,
+  EvalRunView,
   SubmitTaskResponse,
   TaskListResponse,
   TaskView,
@@ -70,6 +72,8 @@ export interface ApiClient {
   submitTask(goal: string, context?: Record<string, unknown>): Promise<SubmitTaskResponse>;
   confirmTask(taskId: string, approved: boolean): Promise<void>;
   provideInput(taskId: string, answer: string): Promise<void>;
+  listEvalRuns(limit?: number): Promise<EvalRunListResponse>;
+  getEvalRun(runId: string): Promise<EvalRunView>;
 }
 
 export interface ApiClientOptions {
@@ -207,6 +211,15 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ answer }),
       });
+    },
+
+    async listEvalRuns(limit) {
+      const query = limit === undefined ? "" : `?limit=${encodeURIComponent(String(limit))}`;
+      return request<EvalRunListResponse>(`/evals${query}`);
+    },
+
+    async getEvalRun(runId) {
+      return request<EvalRunView>(`/evals/${encodeURIComponent(runId)}`);
     },
   };
 }

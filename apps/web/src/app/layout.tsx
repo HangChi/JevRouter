@@ -21,6 +21,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               JevRouter
             </Link>
             <span className="text-xs text-muted">trace dashboard</span>
+            <nav className="ml-auto flex items-center gap-3 text-xs">
+              <Link href="/" className="text-ink-2 transition-colors hover:text-ink">
+                Runs
+              </Link>
+              <Link href="/evals" className="text-ink-2 transition-colors hover:text-ink">
+                Evals
+              </Link>
+            </nav>
           </div>
         </header>
 
