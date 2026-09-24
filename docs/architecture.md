@@ -35,7 +35,7 @@ Core task state and execution budgets are immutable snapshots. State advancement
 4. Runner 拥有预算消耗点和循环终止权，并在执行前再次复检注册状态、强制 `write`/`external` 风险工具的确认，且把确认绑定到已合成的参数上。参数合成属于 LLM 职责，通过注入的 resolver 提供；`delegate_to_llm` 分支同理，只有服务端显式配置了 LLM（`LLM_API_KEY` + `LLM_MODEL`）时才装配委托 handler，否则 fail closed。
 5. 工具执行器按工具自身 schema 校验输入；对外部或不可逆副作用强制确认。
 6. verifier 报告完成概率与结果质量；是否结束或继续循环由 Runner 决定，本阶段只提供评估，不设完成阈值、不改状态、不执行工具。
-7. 每一步产生一条 `StepTrace`，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟；Runner 在内存中产出，持久化由后续阶段负责。
+7. 每一步产生一条 `StepTrace`，包含状态快照、请求/响应摘要、决策概率、策略结果、执行结果与延迟；Runner 在内存中产出，持久化由 `apps/api/storage.py` 负责。
 8. eval 用固定用例重放同一套 Router/PolicyEngine，并用候选集完全一致的 LLM 基线路由做对比；它只测量，不改变被测量的对象，也不改阈值。
 
 MVP Policy Engine thresholds are `requires_confirmation > 0.75`, `risk >= 2.5`, `needs_reasoning > 0.70`, and route confidence `< 0.75`, in that precedence. They are initial project values, not TypeSafe recommendations, and should later be calibrated against evals. Unknown or no-longer-registered actions fail closed with `reject`.
