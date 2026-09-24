@@ -478,3 +478,11 @@ describe("eval formatters", () => {
     expect(rateTone(null)).toBe("neutral");
   });
 });
+
+describe("formatTokens precision", () => {
+  it("rounds a mean to one decimal instead of printing the arithmetic", () => {
+    expect(formatTokens(207.97826086956522, 265.0217394348)).toBe("208 / 265");
+    expect(formatTokens(606.56, 133.8)).toBe("606.6 / 133.8");
+    expect(formatTokens(10, 5)).toBe("10 / 5");
+  });
+});

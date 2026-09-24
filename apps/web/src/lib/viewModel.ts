@@ -565,7 +565,13 @@ export function formatTokens(input: number | null, output: number | null): strin
   if (!isFiniteNumber(input) || !isFiniteNumber(output)) {
     return ABSENT;
   }
-  return `${input} / ${output}`;
+  // Means of integer counts: one decimal is the most a reader can use, and a
+  // raw float would print the arithmetic instead of the number.
+  return `${round(input)} / ${round(output)}`;
+}
+
+function round(value: number): string {
+  return (Math.round(value * 10) / 10).toString();
 }
 
 /** Tone for a rate: higher is better, and the bands are deliberately coarse. */
