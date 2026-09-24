@@ -24,7 +24,7 @@ function InputPrompt({ taskId, question }: { taskId: string; question: string })
           required
           maxLength={4000}
           autoFocus
-          placeholder="Type the answer the run is waiting for"
+          placeholder="输入运行正在等待的答案"
           className="min-w-0 flex-1 rounded-md border border-hairline bg-page px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
         />
         <button
@@ -32,7 +32,7 @@ function InputPrompt({ taskId, question }: { taskId: string; question: string })
           disabled={pending}
           className="rounded-md bg-accent-strong px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? "Sending…" : "Send answer"}
+          {pending ? "发送中…" : "发送"}
         </button>
       </div>
       {state.ok ? null : (
@@ -59,17 +59,16 @@ function ConfirmationPrompt({
   const answer = (approved: boolean) => {
     startTransition(async () => {
       const result = await confirmTaskAction(taskId, approved);
-      setMessage(result.ok ? null : (result.message ?? "the answer was not accepted"));
+      setMessage(result.ok ? null : (result.message ?? "应答未被接受"));
     });
   };
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-ink">
-        The run is waiting to execute <span className="font-mono text-ink">{action}</span> with the
-        arguments below.
+        运行即将执行 <span className="font-mono text-ink">{action}</span>，参数如下。
       </p>
-      <JsonBlock label="Arguments to be executed" value={args} defaultOpen />
+      <JsonBlock label="待执行参数" value={args} defaultOpen />
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -77,7 +76,7 @@ function ConfirmationPrompt({
           onClick={() => answer(true)}
           className="rounded-md bg-accent-strong px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? "Answering…" : "Approve"}
+          {pending ? "处理中…" : "批准"}
         </button>
         <button
           type="button"
@@ -85,7 +84,7 @@ function ConfirmationPrompt({
           onClick={() => answer(false)}
           className="rounded-md border border-hairline bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-page disabled:opacity-50"
         >
-          Deny
+          拒绝
         </button>
         {message === null ? null : (
           <p role="status" className="text-xs text-critical">

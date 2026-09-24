@@ -198,12 +198,12 @@ describe("decisionChain", () => {
 
 describe("labels and tones", () => {
   it("labels every branch", () => {
-    expect(branchLabel("denied")).toBe("Confirmation denied");
-    expect(branchLabel("approved_failed")).toBe("Approved, then failed");
+    expect(branchLabel("denied")).toBe("确认被拒绝");
+    expect(branchLabel("approved_failed")).toBe("已批准但执行失败");
   });
 
-  it("keeps an unknown outcome verbatim instead of reworded", () => {
-    expect(outcomeLabel("execute")).toBe("Execute");
+  it("translates a known outcome and leaves an unknown one intact", () => {
+    expect(outcomeLabel("execute")).toBe("执行");
     expect(outcomeLabel("later_thing")).toBe("later_thing");
     expect(outcomeLabel(null)).toBe(ABSENT);
   });
@@ -341,7 +341,7 @@ describe("modeCardSet", () => {
     const cards = modeCardSet(jevMetrics()).cards;
     const expected = cards.find((card) => card.key === "expected");
     expect(expected?.value).toBe("88.0%");
-    expect(expected?.detail).toBe("44 of 50 chose the expected action");
+    expect(expected?.detail).toBe("44/50 选择了期望动作");
     expect(expected?.tone).toBe("neutral");
   });
 
@@ -349,11 +349,11 @@ describe("modeCardSet", () => {
     const cards = modeCardSet(jevMetrics()).cards;
     expect(cards.find((card) => card.key === "latency")?.value).toBe("118 ms");
     expect(cards.find((card) => card.key === "latency")?.detail).toBe(
-      "p50 104 ms · p95 210 ms · max 402 ms",
+      "p50 104 ms · p95 210 ms · 最大 402 ms",
     );
     expect(cards.find((card) => card.key === "tokens")?.value).toBe("423.2 / 12.1");
     expect(cards.find((card) => card.key === "tokens")?.detail).toBe(
-      "in 21160 · out 605 across 50 cases",
+      "入 21160 · 出 605，共 50 个用例",
     );
   });
 
@@ -366,20 +366,20 @@ describe("modeCardSet", () => {
 
   it("describes the baseline's success without confirmation wording", () => {
     const baseline = modeCardSet(llmMetrics()).cards.find((card) => card.key === "success");
-    expect(baseline?.detail).toBe("41 of 50 chose an acceptable action");
+    expect(baseline?.detail).toBe("41/50 选择了可接受动作");
     const jev = modeCardSet(jevMetrics()).cards.find((card) => card.key === "success");
-    expect(jev?.detail).toBe("41 of 50 matched and confirmed as the case required");
+    expect(jev?.detail).toBe("41/50 命中且确认结论与用例要求一致");
   });
 
   it("labels the baseline as the baseline", () => {
-    expect(modeCardSet(llmMetrics()).label).toBe("LLM baseline");
+    expect(modeCardSet(llmMetrics()).label).toBe("LLM 基线");
     expect(modeCardSet(jevMetrics()).label).toBe("Jev");
   });
 
   it("adds an error card only when cases errored", () => {
     expect(modeCardSet(jevMetrics()).cards.map((card) => card.key)).not.toContain("errors");
     const withErrors = modeCardSet(jevMetrics({ error_count: 3, error_rate: 0.06 })).cards;
-    expect(withErrors.find((card) => card.key === "errors")?.detail).toBe("3 of 50 cases errored");
+    expect(withErrors.find((card) => card.key === "errors")?.detail).toBe("3/50 个用例出错");
   });
 
   it("reports absent token usage rather than zeros", () => {
@@ -387,9 +387,7 @@ describe("modeCardSet", () => {
       jevMetrics({ input_tokens: null, output_tokens: null }),
     ).cards;
     expect(cards.find((card) => card.key === "tokens")?.value).toBe(EVAL_ABSENT);
-    expect(cards.find((card) => card.key === "tokens")?.detail).toBe(
-      "the provider reported no usage",
-    );
+    expect(cards.find((card) => card.key === "tokens")?.detail).toBe("提供方未返回用量");
   });
 });
 
@@ -405,7 +403,7 @@ describe("agreementCard", () => {
   it("reports the paired count and the shared actions", () => {
     const card = agreementCard(comparison());
     expect(card?.value).toBe("92.0%");
-    expect(card?.detail).toBe("46 of 50 compared cases named the same action");
+    expect(card?.detail).toBe("46/50 个可比用例选择了相同动作");
     expect(card?.tone).toBe("good");
   });
 
@@ -452,7 +450,7 @@ describe("outcomeAction", () => {
   it("shows the action, or the error that replaced it", () => {
     expect(outcomeAction(outcome())).toBe("calculator");
     expect(outcomeAction(outcome({ action: null, error: "http: provider down" }))).toBe(
-      "error: http: provider down",
+      "出错：http: provider down",
     );
     expect(outcomeAction(outcome({ action: null, error: null }))).toBe(EVAL_ABSENT);
     expect(outcomeAction(null)).toBe(EVAL_ABSENT);

@@ -147,15 +147,15 @@ export function probabilityMeters(trace: TraceView): ProbabilityMeter[] {
     });
   };
 
-  push("route_confidence", "Route confidence", trace.route_confidence, ROUTE_CONFIDENCE_THRESHOLD, "below");
+  push("route_confidence", "路由置信度", trace.route_confidence, ROUTE_CONFIDENCE_THRESHOLD, "below");
   push(
     "requires_confirmation",
-    "Confirmation need",
+    "确认需求",
     trace.requires_confirmation,
     CONFIRMATION_THRESHOLD,
     "above",
   );
-  push("needs_reasoning", "Reasoning need", trace.needs_reasoning, REASONING_THRESHOLD, "above");
+  push("needs_reasoning", "推理需求", trace.needs_reasoning, REASONING_THRESHOLD, "above");
   return meters;
 }
 
@@ -170,7 +170,7 @@ export function completionMeter(trace: TraceView): ProbabilityMeter | null {
   }
   return {
     key: "completion_probability",
-    label: "Completion",
+    label: "完成度",
     value: trace.completion_probability,
     threshold: COMPLETION_THRESHOLD,
     direction: "below",
@@ -199,7 +199,7 @@ export function scoreReadouts(trace: TraceView): ScoreReadout[] {
   if (isFiniteNumber(trace.route_risk)) {
     readouts.push({
       key: "route_risk",
-      label: "Route risk",
+      label: "路由风险",
       value: trace.route_risk,
       threshold: RISK_THRESHOLD,
       level: levelOf(trace.route_risk, RISK_LEVEL_COUNT),
@@ -210,7 +210,7 @@ export function scoreReadouts(trace: TraceView): ScoreReadout[] {
   if (isFiniteNumber(trace.quality_score)) {
     readouts.push({
       key: "quality_score",
-      label: "Result quality",
+      label: "结果质量",
       value: trace.quality_score,
       threshold: null,
       level: levelOf(trace.quality_score, QUALITY_LEVEL_COUNT),
@@ -266,31 +266,48 @@ export function decisionChain(traces: TraceView[]): ChainNode[] {
 }
 
 const BRANCH_LABELS: Record<Branch, string> = {
-  executed: "Executed",
-  denied: "Confirmation denied",
-  approved_failed: "Approved, then failed",
-  rejected: "Rejected",
-  delegated: "Delegated to LLM",
-  asked: "Asked the user",
-  finished: "Finished",
-  not_executed: "Not executed",
-  unknown: "Unknown",
+  executed: "已执行",
+  denied: "确认被拒绝",
+  approved_failed: "已批准但执行失败",
+  rejected: "已拒绝",
+  delegated: "已委托 LLM",
+  asked: "已询问用户",
+  finished: "已结束",
+  not_executed: "未执行",
+  unknown: "未知",
 };
 
+/**
+ * The transported outcome is a stable identifier, so it is translated for
+ * display and never rewritten: an unrecognized value falls through to itself
+ * rather than being folded into a known label.
+ */
 const OUTCOME_LABELS: Record<string, string> = {
-  execute: "Execute",
-  ask_confirmation: "Ask confirmation",
-  delegate_to_llm: "Delegate to LLM",
-  ask_user: "Ask user",
-  finish: "Finish",
-  reject: "Reject",
+  execute: "执行",
+  ask_confirmation: "请求确认",
+  delegate_to_llm: "委托 LLM",
+  ask_user: "询问用户",
+  finish: "结束",
+  reject: "拒绝",
+};
+
+/** The live and terminal statuses, translated the same way. */
+const STATUS_LABELS: Record<string, string> = {
+  running: "运行中",
+  awaiting_confirmation: "等待确认",
+  awaiting_input: "等待输入",
+  completed: "已完成",
+  needs_user_input: "需要用户输入",
+  needs_confirmation: "需要确认",
+  rejected: "已拒绝",
+  budget_exhausted: "预算耗尽",
+  failed: "失败",
 };
 
 export function branchLabel(branch: Branch): string {
   return BRANCH_LABELS[branch];
 }
 
-/** The policy outcome verbatim when it is known, so nothing is reworded. */
 export function outcomeLabel(outcome: string | null): string {
   if (outcome === null) {
     return ABSENT;
@@ -314,6 +331,11 @@ export function outcomeTone(outcome: string | null): Tone {
     default:
       return "bad";
   }
+}
+
+/** A transported status in the operator's language, identifiers intact. */
+export function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }
 
 export function formatDuration(durationMs: number): string {
@@ -377,47 +399,47 @@ export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
   const cards: MetricCard[] = [
     {
       key: "expected",
-      label: "Expected match",
+      label: "期望命中",
       value: formatRate(metrics.expected_match_rate),
-      detail: `${metrics.expected_match_count} of ${total} chose the expected action`,
+      detail: `${metrics.expected_match_count}/${total} 选择了期望动作`,
       tone: rateTone(metrics.expected_match_rate),
     },
     {
       key: "allowed",
-      label: "Allowed match",
+      label: "允许集命中",
       value: formatRate(metrics.allowed_match_rate),
-      detail: `${metrics.allowed_match_count} of ${total} chose an acceptable action`,
+      detail: `${metrics.allowed_match_count}/${total} 选择了可接受动作`,
       tone: rateTone(metrics.allowed_match_rate),
     },
     {
       key: "success",
-      label: "Success",
+      label: "任务成功",
       value: formatRate(metrics.success_rate),
       // The baseline has no policy outcome, so confirmation is not part of what
       // it can succeed at; saying so would describe a fact it cannot have.
       detail:
         metrics.confirmation_match_count === null
-          ? `${metrics.success_count} of ${total} chose an acceptable action`
-          : `${metrics.success_count} of ${total} matched and confirmed as the case required`,
+          ? `${metrics.success_count}/${total} 选择了可接受动作`
+          : `${metrics.success_count}/${total} 命中且确认结论与用例要求一致`,
       tone: rateTone(metrics.success_rate),
     },
     {
       key: "latency",
-      label: "Latency",
+      label: "延迟",
       value: formatDuration(metrics.latency.mean_ms),
       detail: `p50 ${formatDuration(metrics.latency.p50_ms)} · p95 ${formatDuration(
         metrics.latency.p95_ms,
-      )} · max ${formatDuration(metrics.latency.max_ms)}`,
+      )} · 最大 ${formatDuration(metrics.latency.max_ms)}`,
       tone: "neutral",
     },
     {
       key: "tokens",
-      label: "Tokens",
+      label: "Token",
       value: formatTokens(metrics.input_tokens?.mean ?? null, metrics.output_tokens?.mean ?? null),
       detail:
         metrics.input_tokens === null || metrics.output_tokens === null
-          ? "the provider reported no usage"
-          : `in ${metrics.input_tokens.total} · out ${metrics.output_tokens.total} across ${total} cases`,
+          ? "提供方未返回用量"
+          : `入 ${metrics.input_tokens.total} · 出 ${metrics.output_tokens.total}，共 ${total} 个用例`,
       tone: "neutral",
     },
   ];
@@ -425,9 +447,9 @@ export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
   if (metrics.escalation_rate !== null && metrics.escalation_count !== null) {
     cards.push({
       key: "escalated",
-      label: "Escalated",
+      label: "升级率",
       value: formatRate(metrics.escalation_rate),
-      detail: `${metrics.escalation_count} of ${total} stopped automatic execution`,
+      detail: `${metrics.escalation_count}/${total} 中止了自动执行`,
       tone: "neutral",
     });
   }
@@ -437,25 +459,25 @@ export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
   ) {
     cards.push({
       key: "confirmation",
-      label: "Confirmation fit",
+      label: "确认吻合度",
       value: formatRate(metrics.confirmation_match_count / total),
-      detail: `${metrics.confirmation_requested_count} asked · ${metrics.confirmation_match_count} of ${total} matched the case`,
+      detail: `请求确认 ${metrics.confirmation_requested_count} 次 · ${metrics.confirmation_match_count}/${total} 与用例要求一致`,
       tone: rateTone(metrics.confirmation_match_count / total),
     });
   }
   if (metrics.error_count > 0) {
     cards.push({
       key: "errors",
-      label: "Errors",
+      label: "错误",
       value: formatRate(metrics.error_rate),
-      detail: `${metrics.error_count} of ${total} cases errored`,
+      detail: `${metrics.error_count}/${total} 个用例出错`,
       tone: "bad",
     });
   }
 
   return {
     mode: metrics.mode === "llm" ? "llm" : "jev",
-    label: metrics.mode === "llm" ? "LLM baseline" : "Jev",
+    label: metrics.mode === "llm" ? "LLM 基线" : "Jev",
     cards,
   };
 }
@@ -474,7 +496,7 @@ export function comparisonCardSets(metrics: EvalComparisonMetrics): ModeCardSet[
 
 export interface AgreementCard {
   key: "agreement";
-  label: "Routing agreement";
+  label: string;
   value: string;
   detail: string;
   tone: Tone;
@@ -493,9 +515,9 @@ export function agreementCard(metrics: EvalComparisonMetrics): AgreementCard | n
   const agreed = metrics.agreement_count ?? 0;
   return {
     key: "agreement",
-    label: "Routing agreement",
+    label: "路由一致率",
     value: formatRate(metrics.agreement_rate),
-    detail: `${agreed} of ${compared} compared cases named the same action`,
+    detail: `${agreed}/${compared} 个可比用例选择了相同动作`,
     tone: rateTone(metrics.agreement_rate),
   };
 }
@@ -554,7 +576,7 @@ export function outcomeAction(outcome: EvalCaseOutcome | null): string {
   if (outcome.action !== null) {
     return outcome.action;
   }
-  return outcome.error === null ? ABSENT : `error: ${outcome.error}`;
+  return outcome.error === null ? ABSENT : `出错：${outcome.error}`;
 }
 
 export function formatRate(value: number | null): string {

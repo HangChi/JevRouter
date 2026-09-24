@@ -20,7 +20,7 @@ export default async function EvalRunPage({ params }: PageProps<"/evals/[runId]"
       return (
         <div className="flex flex-col gap-4">
           <BackLink />
-          <Notice tone="bad" title="The API could not be reached">
+          <Notice tone="bad" title="无法连接到 API">
             {result.message}
           </Notice>
         </div>
@@ -65,7 +65,7 @@ export default async function EvalRunPage({ params }: PageProps<"/evals/[runId]"
 
       <section className="flex flex-col gap-3">
         <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-          Cases
+          逐用例对比
         </h2>
         <ComparisonTable rows={rows} />
       </section>

@@ -19,7 +19,7 @@ export function DecisionChain({ traces }: { traces: TraceView[] }) {
   if (nodes.length === 0) {
     return (
       <p className="text-xs text-muted">
-        No step has completed yet, so there is no chain to draw.
+        还没有已完成的步骤，因此没有决策链可画。
       </p>
     );
   }

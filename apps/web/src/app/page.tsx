@@ -15,10 +15,9 @@ export default async function Home() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-ink">Runs</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-ink">运行</h1>
         <p className="mt-1 text-sm text-ink-2">
-          Every run the API knows about, newest first. The registry lives in the API process, so a
-          restarted API starts this list empty.
+          API 知道的所有运行，最新在前。工具注册表存在于 API 进程内，因此 API 重启后这个列表会从空开始。
         </p>
       </div>
 
@@ -27,7 +26,7 @@ export default async function Home() {
       {result.ok ? (
         <TaskList tasks={result.value.tasks} />
       ) : (
-        <Notice tone={result.unavailable ? "bad" : "neutral"} title="The run list could not be read">
+        <Notice tone={result.unavailable ? "bad" : "neutral"} title="无法读取运行列表">
           {result.message}
         </Notice>
       )}

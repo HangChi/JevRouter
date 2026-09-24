@@ -24,7 +24,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
       return (
         <div className="flex flex-col gap-4">
           <BackLink />
-          <Notice tone="bad" title="The API could not be reached">
+          <Notice tone="bad" title="无法连接到 API">
             {task.message}
           </Notice>
         </div>
@@ -49,13 +49,13 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
           {/* Counted from the traces this page renders: the handle's own step
               counter is only recorded once the run finishes. */}
           <span className="ml-auto font-mono text-xs tabular-nums text-ink-2">
-            {steps.length} {steps.length === 1 ? "step" : "steps"} recorded
+            已记录 {steps.length} 步
           </span>
         </div>
         <h1 className="text-base font-semibold text-ink">{view.goal}</h1>
         <p className="font-mono text-xs text-muted">{view.task_id}</p>
         {view.diagnostic === null ? null : (
-          <Notice tone="bad" title="Diagnostic">
+          <Notice tone="bad" title="诊断信息">
             {view.diagnostic}
           </Notice>
         )}
@@ -64,7 +64,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
       {view.pending_confirmation !== null || view.pending_input !== null ? (
         <section className="flex flex-col gap-3 rounded-lg border border-warning/50 bg-warning/10 px-4 py-4">
           <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-            Waiting for you
+            等待你处理
           </h2>
           <PendingPrompt task={view} />
         </section>
@@ -72,23 +72,23 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
 
       <section className="flex flex-col gap-3">
         <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-          Decision chain
+          决策链
         </h2>
         <DecisionChain traces={steps} />
       </section>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-          Steps
+          步骤
         </h2>
         {traces.ok ? null : (
-          <Notice tone="bad" title="The traces could not be read">
+          <Notice tone="bad" title="无法读取 trace">
             {traces.message}
           </Notice>
         )}
         {steps.length === 0 ? (
           <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-muted">
-            No step has completed yet.
+            还没有已完成的步骤。
           </p>
         ) : (
           <div className="flex flex-col gap-4">
@@ -105,7 +105,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
 function BackLink() {
   return (
     <Link href="/" className="text-xs text-ink-2 transition-colors hover:text-ink">
-      ← All runs
+      ← 所有运行
     </Link>
   );
 }

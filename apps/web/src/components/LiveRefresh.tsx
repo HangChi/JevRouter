@@ -33,7 +33,7 @@ export function LiveRefresh({ active, intervalMs = 2000 }: { active: boolean; in
   return (
     <span className="inline-flex items-center gap-2 text-xs text-muted">
       <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />
-      refreshing every {intervalMs / 1000}s
+      每 {intervalMs / 1000} 秒刷新
     </span>
   );
 }

@@ -9,7 +9,7 @@ export function TaskList({ tasks }: { tasks: TaskSummary[] }) {
   if (tasks.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-muted">
-        No runs yet. Submit a goal above to start one.
+        还没有运行。在上方提交一个目标即可开始。
       </p>
     );
   }
@@ -28,7 +28,7 @@ export function TaskList({ tasks }: { tasks: TaskSummary[] }) {
                 the run finishes, so showing it would read as "no steps taken". */}
             {isLiveStatus(task.status) ? null : (
               <span className="font-mono text-xs tabular-nums text-ink-2">
-                {task.step} {task.step === 1 ? "step" : "steps"}
+                {task.step} 步
               </span>
             )}
             <span className="font-mono text-xs text-muted">{task.task_id.slice(0, 8)}</span>

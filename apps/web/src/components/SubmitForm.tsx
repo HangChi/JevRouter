@@ -18,27 +18,27 @@ export function SubmitForm() {
     <form action={formAction} className="rounded-lg border border-hairline bg-surface p-4">
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium tracking-wide text-ink-2">Goal</span>
+          <span className="text-xs font-medium tracking-wide text-ink-2">目标</span>
           <input
             name="goal"
             type="text"
             required
             maxLength={2000}
-            placeholder="Calculate 2 + 2 and write the result to a note"
+            placeholder="计算 6 * 7，然后把结果写进 notes.md"
             className="rounded-md border border-hairline bg-page px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
           />
         </label>
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium tracking-wide text-ink-2">
-            Context <span className="text-muted">(optional JSON object)</span>
+            上下文 <span className="text-muted">（可选，JSON 对象）</span>
           </span>
           <textarea
             name="context"
             rows={2}
             value={context}
             onChange={(event) => setContext(event.target.value)}
-            placeholder='{"topic": "routing"}'
+            placeholder='{"主题": "路由"}'
             className="rounded-md border border-hairline bg-page px-3 py-2 font-mono text-xs text-ink placeholder:text-muted focus:border-accent focus:outline-none"
           />
         </label>
@@ -49,7 +49,7 @@ export function SubmitForm() {
             disabled={pending}
             className="rounded-md bg-accent-strong px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {pending ? "Starting…" : "Start run"}
+            {pending ? "启动中…" : "开始运行"}
           </button>
           {state.ok ? null : (
             <p role="status" className="text-xs text-critical">

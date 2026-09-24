@@ -76,13 +76,13 @@ export function StepCard({ trace }: { trace: TraceView }) {
       </header>
       {trace.confirmed === null ? null : (
         <p className="border-b border-hairline px-4 py-2 text-xs text-muted">
-          This step waited for a human, so its duration includes that wait.
+          这一步在等待人工处理，因此耗时包含了等待时间。
         </p>
       )}
 
       <div className="grid gap-6 px-4 py-4 md:grid-cols-2">
         <section>
-          <SectionHeading>Jev signals</SectionHeading>
+          <SectionHeading>Jev 信号</SectionHeading>
           <div className="mt-3 space-y-2">
             {meters.map((meter) => (
               <ProbabilityMeter key={meter.key} meter={meter} />
@@ -90,38 +90,38 @@ export function StepCard({ trace }: { trace: TraceView }) {
             {risk === undefined ? null : <ScoreReadout key={risk.key} readout={risk} />}
             {meters.length === 0 && risk === undefined ? (
               <p className="text-xs text-muted">
-                The API returned no routing signals for this step.
+                API 没有为这一步返回路由信号。
               </p>
             ) : null}
           </div>
         </section>
 
         <section>
-          <SectionHeading>Policy</SectionHeading>
+          <SectionHeading>策略</SectionHeading>
           <p className="mt-3 text-sm text-ink">
             {outcomeLabel(outcome)}
             <span className="text-muted"> — </span>
             <span className="text-ink-2">{trace.policy_reason ?? ABSENT}</span>
           </p>
 
-          <SectionHeading>Branch</SectionHeading>
+          <SectionHeading>分支</SectionHeading>
           <p className="mt-2 text-sm text-ink">
             {branchLabel(branch)}
             {trace.confirmed === true && trace.executed ? (
-              <span className="text-muted"> (after confirmation)</span>
+              <span className="text-muted">（确认后执行）</span>
             ) : null}
           </p>
 
-          <SectionHeading>Verification</SectionHeading>
+          <SectionHeading>验证</SectionHeading>
           <div className="mt-3 space-y-2">
             {completion === null ? (
-              <p className="text-xs text-muted">This step was not verified.</p>
+              <p className="text-xs text-muted">这一步没有经过验证。</p>
             ) : (
               <>
                 <ProbabilityMeter meter={completion} />
                 {verification?.completionMet ? null : (
                   <p className="text-xs text-ink-2">
-                    Below the runner&rsquo;s threshold, so the run kept routing.
+                    低于 runner 的阈值，因此运行继续路由。
                   </p>
                 )}
               </>
@@ -133,14 +133,14 @@ export function StepCard({ trace }: { trace: TraceView }) {
 
       <footer className="flex flex-col gap-2 border-t border-hairline px-4 py-3">
         {trace.arguments === undefined || trace.arguments === null ? null : (
-          <JsonBlock label="Arguments" value={trace.arguments} />
+          <JsonBlock label="参数" value={trace.arguments} />
         )}
         {trace.executed ? (
-          <JsonBlock label="Result" value={trace.result} defaultOpen />
+          <JsonBlock label="执行结果" value={trace.result} defaultOpen />
         ) : (
-          <p className="text-xs text-muted">No tool ran for this step.</p>
+          <p className="text-xs text-muted">这一步没有执行任何工具。</p>
         )}
-        <JsonBlock label="State snapshot" value={trace.state_snapshot} />
+        <JsonBlock label="状态快照" value={trace.state_snapshot} />
       </footer>
     </article>
   );

@@ -22,21 +22,20 @@ export default async function EvalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-ink">Evals</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-ink">评测</h1>
         <p className="mt-1 text-sm text-ink-2">
-          Jev against the LLM baseline over the fixed case set. A run is recorded by the eval CLI;
-          nothing on this page starts one.
+          Jev 与 LLM 基线在固定用例集上的对比。运行由 eval CLI 记录，这个页面本身不会启动任何评测。
         </p>
       </div>
 
       {result.ok ? null : (
-        <Notice tone={result.unavailable ? "bad" : "neutral"} title="The eval list could not be read">
+        <Notice tone={result.unavailable ? "bad" : "neutral"} title="无法读取评测列表">
           {result.message}
         </Notice>
       )}
 
       {detail !== undefined && !detail.ok ? (
-        <Notice tone={detail.unavailable ? "bad" : "neutral"} title="The newest run could not be read">
+        <Notice tone={detail.unavailable ? "bad" : "neutral"} title="无法读取最新一次运行">
           {detail.message}
         </Notice>
       ) : null}
@@ -44,7 +43,7 @@ export default async function EvalsPage() {
       {detail !== undefined && detail.ok ? (
         <section className="flex flex-col gap-4">
           <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-            Newest run · {detail.value.mode} · {detail.value.case_count} cases
+            最新一次 · {detail.value.mode} · {detail.value.case_count} 个用例
           </h2>
           {(() => {
             const agreement = agreementCard(detail.value.metrics);
@@ -65,7 +64,7 @@ export default async function EvalsPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-[0.7rem] font-semibold tracking-widest text-muted uppercase">
-          Recorded runs
+          已记录的运行
         </h2>
         {result.ok ? <EvalRunList runs={result.value.runs} /> : null}
       </section>

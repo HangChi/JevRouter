@@ -28,7 +28,7 @@ function AgreementCell({ agreed }: { agreed: boolean | null }) {
   }
   return (
     <span className={agreed ? "font-mono text-good" : "font-mono text-warning"}>
-      {agreed ? "same" : "differs"}
+      {agreed ? "一致" : "分歧"}
     </span>
   );
 }
@@ -46,11 +46,11 @@ export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
       <table className="w-full min-w-[52rem] border-collapse">
         <thead>
           <tr className="border-b border-hairline text-left text-[0.65rem] tracking-widest text-muted uppercase">
-            <th className={CELL}>Case</th>
-            <th className={CELL}>Expected</th>
+            <th className={CELL}>用例</th>
+            <th className={CELL}>期望动作</th>
             <th className={CELL}>Jev</th>
             <th className={CELL}>LLM</th>
-            <th className={CELL}>Route</th>
+            <th className={CELL}>一致性</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-hairline">

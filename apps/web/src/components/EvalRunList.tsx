@@ -12,9 +12,9 @@ export function EvalRunList({ runs }: { runs: EvalRunSummary[] }) {
   if (runs.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-hairline px-4 py-8 text-center text-sm text-muted">
-        No eval run recorded yet. Run{" "}
-        <code className="font-mono text-ink-2">uv run python -m evals --mode compare</code> and post
-        it with <code className="font-mono text-ink-2">--api</code>.
+        还没有记录过 eval 运行。执行{" "}
+        <code className="font-mono text-ink-2">uv run python -m evals --mode compare</code> 并用{" "}
+        <code className="font-mono text-ink-2">--api</code> 投递。
       </p>
     );
   }
@@ -32,7 +32,7 @@ export function EvalRunList({ runs }: { runs: EvalRunSummary[] }) {
             </span>
             <span className="font-mono text-xs text-muted">{run.created_at}</span>
             <span className="ml-auto font-mono text-xs tabular-nums text-ink-2">
-              {run.case_count} {run.case_count === 1 ? "case" : "cases"}
+              {run.case_count} 个用例
             </span>
             <span className="font-mono text-xs text-muted">{run.run_id.slice(0, 8)}</span>
           </Link>

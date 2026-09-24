@@ -1,4 +1,4 @@
-import { statusTone, type Tone } from "@/lib/viewModel";
+import { statusLabel, statusTone, type Tone } from "@/lib/viewModel";
 
 const TONE_DOT: Record<Tone, string> = {
   neutral: "bg-muted",
@@ -27,7 +27,7 @@ export function StatusBadge({ status }: { status: string }) {
       className={`inline-flex items-center gap-2 rounded-full border border-hairline px-2.5 py-1 text-xs font-medium tracking-wide text-ink ${TONE_TINT[tone]}`}
     >
       <span className={`h-2 w-2 rounded-full ${TONE_DOT[tone]}`} aria-hidden="true" />
-      {status.replace(/_/g, " ")}
+      {statusLabel(status)}
     </span>
   );
 }

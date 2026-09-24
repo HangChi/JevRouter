@@ -30,7 +30,7 @@ export function ScoreReadout({ readout }: { readout: Readout }) {
         {formatScore(readout.value)}
         <span
           className="ml-2 text-muted"
-          title="The core package does not normalize this score; the scale is stated rather than assumed."
+          title="核心包不对该分数做归一化，因此这里标注刻度范围而不是假定。"
         >
           scale 0–{readout.levelCount - 1}
         </span>
