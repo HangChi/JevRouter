@@ -22,8 +22,8 @@ from jev_router.verifier import VerificationDecision
 SCHEMA_VERSION = 2
 PAYLOAD_VERSION = 1
 
-# Stored status for a run whose traces are still being written; it is replaced by
-# the terminal RunStatus once record() is called.
+# 用于 trace 仍在写入中的任务的存储状态；一旦调用 record()，它会被
+# 终态的 RunStatus 取代。
 RUNNING_STATUS = "running"
 
 _SCHEMA = """
@@ -95,7 +95,7 @@ CREATE INDEX IF NOT EXISTS eval_case_results_run ON eval_case_results (run_id);
 
 
 class StorageError(Exception):
-    """Raised when a stored payload cannot be encoded, decoded or understood."""
+    """当存储的载荷无法编码、解码或被理解时抛出。"""
 
 
 @dataclass(frozen=True)
@@ -112,7 +112,7 @@ class TaskRecord:
 
 @dataclass(frozen=True)
 class EvalRunRecord:
-    """A stored eval run without its rows, for the list view."""
+    """一次已存储的评测运行，不含明细行，供列表视图使用。"""
 
     run_id: str
     mode: str
@@ -125,7 +125,7 @@ def _now() -> str:
 
 
 def _degrade(value: Any) -> Any:
-    """Best-effort conversion that marks only the values JSON cannot hold."""
+    """尽最大努力做转换，只标记 JSON 无法承载的值。"""
     if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, float):
@@ -138,11 +138,10 @@ def _degrade(value: Any) -> Any:
 
 
 def _encode(value: Any) -> str:
-    """Serialize a value into a versioned JSON envelope.
+    """把一个值序列化成带版本号的 JSON 信封。
 
-    Values the state snapshot already refused can still reach a trace, because a
-    tool runs before its output is accepted. Degrading the offending leaves keeps
-    the rest of the run readable instead of losing it entirely.
+    状态快照已经拒绝的值仍可能进入 trace，因为工具是先运行、后接受输出的。
+    把出问题的叶子节点降级，能让运行的其余部分保持可读，而不是整段丢失。
     """
     try:
         data = jsonable(value)
@@ -157,11 +156,11 @@ def _decode(raw: str, field: str) -> Any:
         envelope = json.loads(raw)
         version = envelope["version"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        raise StorageError(f"stored {field} is not a versioned payload") from exc
+        raise StorageError(f"存储的 {field} 不是带版本的载荷") from exc
     if version != PAYLOAD_VERSION:
         raise StorageError(
-            f"stored {field} uses payload version {version}, "
-            f"but this build reads version {PAYLOAD_VERSION}"
+            f"存储的 {field} 使用 payload 版本 {version}，"
+            f"但本构建读取的是版本 {PAYLOAD_VERSION}"
         )
     return envelope["data"]
 
@@ -179,11 +178,11 @@ def _verification_to_row(task_id: str, step: int, decision: VerificationDecision
 
 
 class IncrementalSink:
-    """A ``TraceSink`` that writes each step as the Runner emits it.
+    """一个 ``TraceSink``，在 Runner 每产出一个步骤时就写入该步骤。
 
-    It must expose ``emit`` rather than be a bare callable: the Runner's
-    ``TraceSink`` is a Protocol with that method, and a missing attribute is
-    swallowed by the Runner's own sink-error guard.
+    它必须暴露 ``emit`` 方法而不能只是一个裸可调用对象：Runner 的
+    ``TraceSink`` 是用该方法定义的 Protocol，缺失属性会被 Runner 自身的
+    sink 错误保护逻辑吞掉。
     """
 
     def __init__(self, store: TraceStore) -> None:
@@ -196,12 +195,11 @@ class IncrementalSink:
 
 
 class TraceStore:
-    """SQLite persistence for run traces.
+    """运行 trace 的 SQLite 持久化。
 
-    The core package deliberately holds no database code, so this lives in the
-    API layer and only consumes the immutable records the Runner already
-    produces. Writes are synchronous and short; the store is not thread-safe and
-    is meant to be driven from one event loop.
+    核心包刻意不包含任何数据库代码，因此这部分放在 API 层，并且只消费
+    Runner 已经产出的不可变记录。写入是同步且短暂的；该存储不是线程安全的，
+    应当由单个事件循环驱动。
     """
 
     def __init__(
@@ -212,11 +210,10 @@ class TraceStore:
     ) -> None:
         self._path = Path(path)
         if self._path.parent and not self._path.parent.exists():
-            raise StorageError(f"database directory does not exist: {self._path.parent}")
+            raise StorageError(f"数据库目录不存在：{self._path.parent}")
         self._redact = redact
-        # The connection is created wherever the store is constructed, which is
-        # not necessarily the thread the event loop runs in. All access is still
-        # serialized through that one loop, so relaxing the thread check is safe.
+        # 连接在构造该存储的位置创建，而那未必是事件循环运行的线程。
+        # 所有访问仍然通过那一个循环串行化，因此放开线程检查是安全的。
         self._connection = sqlite3.connect(self._path, check_same_thread=False)
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._apply_schema()
@@ -225,7 +222,7 @@ class TraceStore:
         current = self._connection.execute("PRAGMA user_version").fetchone()[0]
         if current > SCHEMA_VERSION:
             raise StorageError(
-                f"database schema version {current} is newer than supported {SCHEMA_VERSION}"
+                f"数据库 schema 版本 {current} 比支持的版本 {SCHEMA_VERSION} 更新"
             )
         with self._connection:
             self._connection.executescript(_SCHEMA)
@@ -241,7 +238,7 @@ class TraceStore:
         self.close()
 
     def record(self, result: RunResult) -> None:
-        """Persist a finished run. Safe to call repeatedly for the same task."""
+        """持久化一次已完成的运行。对同一任务重复调用是安全的。"""
         state = result.state
         final_state = {
             "goal": state.goal,
@@ -283,7 +280,7 @@ class TraceStore:
                 self._write_step(trace)
 
     def sink(self) -> IncrementalSink:
-        """Return a TraceSink that writes each step as the Runner emits it."""
+        """返回一个 TraceSink，在 Runner 每产出一个步骤时就写入该步骤。"""
         return IncrementalSink(self)
 
     def _ensure_task(self, trace: StepTrace) -> None:
@@ -385,7 +382,7 @@ class TraceStore:
 
     def list_tasks(self, *, limit: int = 50) -> tuple[TaskRecord, ...]:
         if limit < 1:
-            raise ValueError("limit must be positive")
+            raise ValueError("limit 必须为正数")
         rows = self._connection.execute(
             """
             SELECT task_id, goal, status, step, diagnostic, created_at, updated_at, final_state
@@ -408,7 +405,7 @@ class TraceStore:
         )
 
     def load_traces(self, task_id: str) -> tuple[StepTrace, ...]:
-        """Reconstruct the Runner's traces for a task, newest step last."""
+        """为某个任务重建 Runner 的 trace，最新步骤排在最后。"""
         rows = self._connection.execute(
             """
             SELECT s.step, s.action, s.policy_outcome, s.policy_reason, s.route_confidence,
@@ -458,11 +455,11 @@ class TraceStore:
         return tuple(traces)
 
     def record_eval_run(self, request: RecordEvalRunRequest) -> None:
-        """Persist a finished eval run. Safe to call repeatedly for the same run id.
+        """持久化一次已完成的评测运行。对同一 run id 重复调用是安全的。
 
-        The metrics live on the run row and every case outcome gets its own row,
-        so a compare run's 100 rows stay queryable without unpacking one blob.
-        Re-recording replaces the run's rows rather than adding to them.
+        指标存放在运行行上，每个用例结果各占一行，因此一次 compare 运行的
+        100 行仍然可查询，而不必解包一整块数据。重复记录会替换该运行的行，
+        而不是在其上追加。
         """
         with self._connection:
             self._connection.execute(
@@ -500,7 +497,7 @@ class TraceStore:
 
     def list_eval_runs(self, *, limit: int = 50) -> tuple[EvalRunRecord, ...]:
         if limit < 1:
-            raise ValueError("limit must be positive")
+            raise ValueError("limit 必须为正数")
         rows = self._connection.execute(
             """
             SELECT r.run_id, r.mode, r.created_at,
@@ -520,10 +517,10 @@ class TraceStore:
         )
 
     def load_eval_run(self, run_id: str) -> EvalRunView | None:
-        """Rebuild a stored run, newest nothing: rows come back in case order.
+        """重建一次已存储的运行，不做额外排序：行按用例顺序返回。
 
-        Ordering is `(case_id, mode)` so both routers' rows for one case sit next
-        to each other and two runs of the same case set line up row for row.
+        排序键是 `(case_id, mode)`，这样一个用例在两侧路由层的行彼此相邻，
+        同一用例集的两个运行也能逐行对齐。
         """
         row = self._connection.execute(
             "SELECT run_id, mode, created_at, metrics FROM eval_runs WHERE run_id = ?",

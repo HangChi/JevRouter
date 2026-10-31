@@ -10,7 +10,7 @@ from pydantic import (
     model_validator,
 )
 
-# API-level statuses for a run that has not reached a terminal RunStatus yet.
+# 一次运行还没到终态的 API 层状态。
 RUNNING = "running"
 AWAITING_CONFIRMATION = "awaiting_confirmation"
 AWAITING_INPUT = "awaiting_input"
@@ -26,7 +26,7 @@ class SubmitTaskRequest(BaseModel):
     @classmethod
     def _not_blank(cls, value: str) -> str:
         if not value.strip():
-            raise ValueError("goal must not be blank")
+            raise ValueError("goal 不能为空白")
         return value
 
 
@@ -36,9 +36,17 @@ class SubmitTaskResponse(BaseModel):
 
 
 class ConfirmRequest(BaseModel):
+    """回应一次待确认。
+
+    ``digest`` 不是可选的：它把这次批准钉死在「哪个任务、哪个动作、哪份参数」上，
+    否则一次批准可以被复用到后来换过的参数上。取值来自 ``GET /tasks/{id}``
+    返回的 ``pending_confirmation.digest``。
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     approved: bool
+    digest: str = Field(min_length=1, max_length=64)
 
 
 class ProvideInputRequest(BaseModel):
@@ -51,11 +59,14 @@ class PendingConfirmationView(BaseModel):
     action: str
     arguments: dict[str, Any]
     step: int
+    digest: str
+    expires_at: str
 
 
 class PendingInputView(BaseModel):
     question: str
     step: int
+
 
 
 class TaskView(BaseModel):
@@ -128,10 +139,13 @@ class TraceListResponse(BaseModel):
 
 
 class EvalCaseOutcomePayload(BaseModel):
-    """One stored case outcome, exactly as the eval runner reported it.
+    """一条已落库的用例结果，与评测运行器报出来的形状完全一致。
 
-    ``extra="forbid"`` and the range constraints keep a hand-edited or drifted
-    report from being stored as if it were a real run.
+    ``extra="forbid"`` 加上取值范围约束，让手工改过或已经漂移的报告无法被当作
+    一次真实运行存下来。
+
+    末尾五个信号字段是可选的：它们从第十二阶段之后的运行才开始记录，早期报告
+    没有这些字段，但仍应能被读取。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -153,6 +167,12 @@ class EvalCaseOutcomePayload(BaseModel):
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     error: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    risk: float | None = Field(default=None, ge=0)
+    requires_confirmation_probability: float | None = Field(default=None, ge=0, le=1)
+    needs_reasoning_probability: float | None = Field(default=None, ge=0, le=1)
+    tool_risk: str | None = None
+
 
 
 class LatencyPayload(BaseModel):
@@ -172,11 +192,10 @@ class TokenStatsPayload(BaseModel):
 
 
 class ModeMetricsPayload(BaseModel):
-    """One router's aggregate over a run.
+    """一个路由层在一轮评测上的聚合结果。
 
-    The policy fields stay ``None`` for the LLM baseline: it produces no
-    probabilities, so it has no policy outcome to escalate or confirm, and
-    storing zero there would claim a fact the baseline cannot have.
+    LLM 基线的策略字段保持 ``None``：它不产生概率，也就没有可升级或可确认的
+    策略结论，存成 0 等于替它宣称一个它不可能有的事实。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -279,3 +298,34 @@ class EvalRunView(BaseModel):
     case_count: int
     metrics: ComparisonMetricsPayload
     outcomes: list[EvalCaseOutcomePayload]
+
+
+class PolicyThresholdView(BaseModel):
+    """当前生效的四个策略阈值，外加完成度阈值。
+
+    把这些值暴露出来，是为了让「这一次为什么被拦下」可以被解释：仪表盘与
+    校准结果都要拿它做对照，而不是各自硬编码一份副本。
+    """
+
+    confirmation: float
+    risk: float
+    reasoning: float
+    confidence: float
+    completion: float
+
+
+class ToolPolicyView(BaseModel):
+    """一个工具在策略层的样子：它声明了什么风险，因此需不需要确认。"""
+
+    name: str
+    risk: str
+    description: str
+    requires_confirmation: bool
+
+
+class PolicyView(BaseModel):
+    thresholds: PolicyThresholdView
+    tools: list[ToolPolicyView]
+    confirmation_ttl_seconds: int
+    confirmation_binding: str
+

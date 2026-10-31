@@ -65,7 +65,7 @@ class StubDelegate:
 
 
 class ShrinkingRegistry(ToolRegistry):
-    """Serves tool metadata for routing, then reports the tool gone at execution."""
+    """在路由时提供工具元数据，到执行时再报告该工具已消失。"""
 
     def __init__(self, tools: Any = ()) -> None:
         super().__init__(tools)
@@ -165,8 +165,8 @@ async def test_routing_payload_is_plain_json() -> None:
     assert state["context"] == {"locale": "ja-JP"}
     assert state["history"] == []
     assert state["last_result"] is None
-    # The client pre-serializes with json.dumps(allow_nan=False); a mappingproxy
-    # or tuple snapshot would surface as RequestValidationError instead.
+    # 客户端会用 json.dumps(allow_nan=False) 预先序列化；若快照是 mappingproxy
+    # 或 tuple，则会表现为 RequestValidationError。
     json.dumps(state, allow_nan=False)
 
 
@@ -218,7 +218,7 @@ async def test_repeated_incomplete_verification_of_unchanged_state_fails() -> No
     result = await build(fake, resolver=StubResolver()).run("Calculate 2 + 2")
 
     assert result.status == "failed"
-    assert "no progress" in (result.diagnostic or "")
+    assert "没有进展" in (result.diagnostic or "")
     assert fake.route_calls() == 2
     assert fake.verify_calls() == 2
 
@@ -390,7 +390,7 @@ async def test_delegation_advances_state_and_continues() -> None:
     assert len(delegate.calls) == 1
     assert result.state.history[0].action == "delegate_to_llm"
     assert result.state.history[0].result == "The answer is 4."
-    # Delegation is itself a model call, so it is charged against the budget.
+    # 委托本身就是一次模型调用，因此也要计入预算。
     assert result.budget.remaining_model_calls == 8 - 1 - 1 - 1 - 1
 
 
@@ -402,7 +402,7 @@ async def test_missing_delegate_handler_fails_closed() -> None:
     result = await build(fake).run("Reason about it")
 
     assert result.status == "failed"
-    assert "no handler" in (result.diagnostic or "")
+    assert "没有配置委托处理器" in (result.diagnostic or "")
     assert result.state.step == 0
 
 
@@ -479,7 +479,7 @@ async def test_route_transport_failure_fails_the_run() -> None:
     result = await runner.run("Calculate 2 + 2")
 
     assert result.status == "failed"
-    assert "route request failed" in (result.diagnostic or "")
+    assert "路由请求失败" in (result.diagnostic or "")
     assert "transport" in (result.diagnostic or "")
     assert result.state.step == 0
     assert len(result.traces) == 1
@@ -493,7 +493,7 @@ async def test_verification_transport_failure_fails_the_run() -> None:
     result = await build(fake, resolver=StubResolver()).run("Calculate 2 + 2")
 
     assert result.status == "failed"
-    assert "verification request failed" in (result.diagnostic or "")
+    assert "验证请求失败" in (result.diagnostic or "")
     assert "transport" in (result.diagnostic or "")
     assert result.state.step == 1
     assert result.traces[0].executed is True
@@ -540,7 +540,7 @@ async def test_unserializable_tool_output_fails_after_the_side_effect() -> None:
     assert result.status == "failed"
     assert "state could not record" in (result.diagnostic or "")
     assert result.state.step == 0
-    # The tool already ran, so the trace must show the execution.
+    # 工具已经执行过了，因此 trace 必须体现出这次执行。
     assert result.traces[0].executed is True
     assert fake.verify_calls() == 0
 

@@ -1,1 +1,1 @@
-"""HTTP boundary, configuration, storage and core service assembly."""
+"""HTTP 边界、配置、存储与核心服务装配。"""

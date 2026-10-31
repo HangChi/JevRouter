@@ -156,8 +156,8 @@ def test_traces_are_served_while_the_run_is_still_going(api: Any) -> None:
         response = client.get(f"/tasks/{task_id}/traces")
 
     assert response.status_code == 200
-    # The blocked step has not completed, so the Runner has not emitted its trace
-    # yet; what is pending is reported by the task itself.
+    # 被阻塞的步骤尚未完成，因此执行循环还没有输出它的 trace；
+    # 当前待处理的内容由任务本身报告。
     assert response.json()["traces"] == []
     assert body["pending_input"] == {"question": "ask_user", "step": 0}
 
@@ -167,7 +167,7 @@ def test_an_unknown_task_is_not_found(api: Any) -> None:
     with api(fake) as client:
         assert client.get("/tasks/missing").status_code == 404
         assert client.get("/tasks/missing/traces").status_code == 404
-        assert client.post("/tasks/missing/confirm", json={"approved": True}).status_code == 404
+        assert client.post("/tasks/missing/confirm", json={"approved": True, "digest": "x"}).status_code == 404
         assert client.post("/tasks/missing/input", json={"answer": "Tokyo"}).status_code == 404
 
 
@@ -207,9 +207,14 @@ def test_a_write_tool_waits_for_confirmation_with_its_arguments(api: Any, tmp_pa
         assert pending["action"] == "write_file"
         assert pending["arguments"] == arguments
         assert pending["step"] == 0
+        assert pending["digest"]
+        assert pending["expires_at"]
         assert not (tmp_path / "workspace-0" / "note.txt").exists()
 
-        approved = client.post(f"/tasks/{task_id}/confirm", json={"approved": True})
+        approved = client.post(
+            f"/tasks/{task_id}/confirm",
+            json={"approved": True, "digest": pending["digest"]},
+        )
         assert approved.status_code == 204
         body = wait_for_terminal(client, task_id)
 
@@ -228,8 +233,11 @@ def test_denied_confirmation_stops_the_run(api: Any, tmp_path: Path) -> None:
         resolver=StubResolver({"path": "a.txt", "content": "x"}),
     ) as client:
         task_id = submit(client, "Write a file")
-        wait_for(client, task_id, AWAITING_CONFIRMATION)
-        client.post(f"/tasks/{task_id}/confirm", json={"approved": False})
+        pending = wait_for(client, task_id, AWAITING_CONFIRMATION)["pending_confirmation"]
+        client.post(
+            f"/tasks/{task_id}/confirm",
+            json={"approved": False, "digest": pending["digest"]},
+        )
         body = wait_for_terminal(client, task_id)
 
     assert body["status"] == "needs_confirmation"
@@ -244,7 +252,7 @@ def test_confirming_with_nothing_pending_conflicts(api: Any) -> None:
     with api(fake) as client:
         task_id = submit(client)
         wait_for_terminal(client, task_id)
-        response = client.post(f"/tasks/{task_id}/confirm", json={"approved": True})
+        response = client.post(f"/tasks/{task_id}/confirm", json={"approved": True, "digest": "x"})
 
     assert response.status_code == 409
 
@@ -393,7 +401,7 @@ def test_the_default_registry_omits_the_search_tools(tmp_path: Path) -> None:
 
 
 class StubLLM:
-    """Stands in for the configured LLM behind delegation."""
+    """代替委托动作背后所配置的 LLM。"""
 
     def __init__(self, text: str = "the reasoned answer") -> None:
         self.text = text
@@ -418,7 +426,7 @@ def llm_settings(**overrides: Any) -> dict[str, Any]:
 
 
 def delegating_route() -> dict[str, Any]:
-    # needs_reasoning above the 0.70 threshold routes to delegation.
+    # 高于 0.70 阈值的 needs_reasoning 会被路由到委托。
     return route_answers("calculator", needs_reasoning=0.9)
 
 
@@ -454,7 +462,7 @@ def test_settings_reject_an_llm_key_without_a_model(tmp_path: Path) -> None:
 
 
 def test_settings_reject_a_half_configured_llm(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="together"):
+    with pytest.raises(ValueError, match="成对配置"):
         Settings(
             model=TEST_MODEL,
             database_path=str(tmp_path / "traces.db"),
@@ -495,7 +503,7 @@ def test_a_delegating_run_fails_closed_without_an_llm(api: Any) -> None:
         body = wait_for_terminal(client, task_id)
 
     assert body["status"] == "failed"
-    assert body["diagnostic"] == "delegation was requested but no handler is configured"
+    assert body["diagnostic"] == "路由要求委托，但没有配置委托处理器"
 
 
 def test_a_failing_delegation_fails_the_run_with_its_category(api: Any) -> None:
@@ -573,7 +581,7 @@ def test_an_unknown_eval_run_is_not_found(api: Any) -> None:
         response = client.get("/evals/nope")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "eval run not found"
+    assert response.json()["detail"] == "找不到这次评测运行"
 
 
 def test_an_eval_limit_below_one_is_rejected(api: Any) -> None:
@@ -605,7 +613,7 @@ def test_outcomes_from_another_router_are_rejected(api: Any) -> None:
 
 def test_an_unpaired_compare_run_is_rejected(api: Any) -> None:
     body = eval_run().model_dump(mode="json")
-    # The baseline never answered case-2, so the pairing is broken.
+    # 基线从未回答 case-2，因此配对关系被破坏。
     body["outcomes"] = [
         o for o in body["outcomes"] if not (o["case_id"] == "case-2" and o["mode"] == "llm")
     ]
@@ -669,7 +677,7 @@ def test_a_failed_synthesis_stops_the_run_with_its_cause(api: Any) -> None:
         body = wait_for_terminal(client, task_id)
 
     assert body["status"] == "failed"
-    assert "argument synthesis failed: http" in (body["diagnostic"] or "")
+    assert "参数合成失败：http" in (body["diagnostic"] or "")
 
 
 def test_a_malformed_synthesis_stops_the_run(api: Any) -> None:
@@ -681,11 +689,11 @@ def test_a_malformed_synthesis_stops_the_run(api: Any) -> None:
         body = wait_for_terminal(client, task_id)
 
     assert body["status"] == "failed"
-    assert "JSON object" in (body["diagnostic"] or "")
+    assert "JSON 对象" in (body["diagnostic"] or "")
 
 
 def test_arguments_the_tool_refuses_stop_the_run(api: Any) -> None:
-    """The resolver returns the model's object unchanged; the tool decides."""
+    """解析器原样返回模型给出的对象；由工具自行裁决。"""
     fake = FakeJev()
     fake.routes.append(route_answers("calculator"))
 
@@ -722,6 +730,80 @@ def test_an_injected_resolver_still_wins_over_the_llm_one(api: Any) -> None:
         traces = client.get(f"/tasks/{task_id}/traces").json()["traces"]
 
     assert body["status"] == "completed"
-    # The injected stub answers 2 + 2, so the LLM's arguments were not used.
+    # 注入的替身返回 2 + 2，因此没有使用 LLM 给出的参数。
     assert traces[0]["arguments"] == {"expression": "2 + 2"}
     assert traces[0]["result"] == {"result": 4.0}
+
+
+def test_a_confirmation_with_the_wrong_digest_is_refused(api: Any, tmp_path: Path) -> None:
+    """批准必须钉在它当时看到的那份参数上。"""
+    fake = FakeJev()
+    fake.routes.append(route_answers("write_file", WRITE_FILE_CANDIDATES))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(
+        fake,
+        tools=ToolRegistry([WriteFileTool(tmp_path / "workspace-0")]),
+        resolver=StubResolver({"path": "note.txt", "content": "hi"}),
+    ) as client:
+        task_id = submit(client, "Write a note")
+        body = wait_for(client, task_id, AWAITING_CONFIRMATION)
+        digest = body["pending_confirmation"]["digest"]
+
+        refused = client.post(
+            f"/tasks/{task_id}/confirm", json={"approved": True, "digest": "not-the-digest"}
+        )
+        assert refused.status_code == 409
+        assert "摘要" in refused.json()["detail"]
+
+        accepted = client.post(
+            f"/tasks/{task_id}/confirm", json={"approved": True, "digest": digest}
+        )
+
+    assert accepted.status_code == 204
+
+
+def test_a_configured_token_is_required(api: Any) -> None:
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.82))
+
+    with api(fake, api_token="s3cret") as client:
+        anonymous = client.get("/tasks")
+        wrong = client.get("/tasks", headers={"Authorization": "Bearer nope"})
+        allowed = client.get("/tasks", headers={"Authorization": "Bearer s3cret"})
+
+    assert anonymous.status_code == 401
+    assert wrong.status_code == 401
+    assert allowed.status_code == 200
+
+
+def test_without_a_token_the_api_stays_open_for_local_use(api: Any) -> None:
+    fake = FakeJev()
+
+    with api(fake) as client:
+        assert client.get("/tasks").status_code == 200
+
+
+
+def test_policy_reports_the_thresholds_in_force(api: Any, tmp_path: Path) -> None:
+    """页面要能解释「这一步为什么被拦下」，就必须看到真正生效的阈值。"""
+    fake = FakeJev()
+    with api(
+        fake,
+        tools=ToolRegistry(
+            [CalculatorTool(), WriteFileTool(tmp_path / "workspace-0")]
+        ),
+        confirmation_threshold=0.6,
+        risk_threshold=3.0,
+    ) as client:
+        body = client.get("/policy").json()
+
+    assert body["thresholds"]["confirmation"] == 0.6
+    assert body["thresholds"]["risk"] == 3.0
+    assert body["thresholds"]["completion"] == 0.75
+    assert body["confirmation_ttl_seconds"] == 900
+    by_name = {tool["name"]: tool for tool in body["tools"]}
+    assert by_name["calculator"]["requires_confirmation"] is False
+    assert by_name["write_file"]["risk"] == "write"
+    assert by_name["write_file"]["requires_confirmation"] is True

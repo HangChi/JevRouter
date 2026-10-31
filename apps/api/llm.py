@@ -9,8 +9,8 @@ from jev_router.clients.llm import LLMClientError, LLMCompletion
 from jev_router.state import TaskState
 from jev_router.tools.registry import ToolRegistry
 
-# Both collaborators send the run's state to the provider, so a long history is
-# clipped rather than allowed to grow the prompt without bound.
+# 两个协作者都会把运行的 state 发给提供商，因此过长的历史会被裁剪，
+# 而不是任由提示词无界增长。
 _RESULT_LIMIT = 500
 
 _DELEGATE_SYSTEM = (
@@ -28,7 +28,7 @@ _RESOLVER_SYSTEM = (
 
 
 class Completer(Protocol):
-    """The slice of ``LLMClient`` the collaborators need, so tests can supply a double."""
+    """两个协作者所需的 ``LLMClient`` 子集，便于测试注入替身。"""
 
     async def complete(
         self, *, model: str, system: str, prompt: str, max_tokens: int | None = ...
@@ -36,13 +36,12 @@ class Completer(Protocol):
 
 
 class LLMDelegate:
-    """Answers a delegation with LLM-generated reasoning.
+    """用 LLM 生成的推理结果应答一次委托。
 
-    The Runner records the returned text as the ``delegate_to_llm`` step result,
-    so the next route sees it in history; nothing is executed here. A provider
-    failure becomes a ``ValueError`` carrying the error category, which the
-    Runner lets escape ``run()`` and the service turns into a failed run — a
-    delegation that silently produced nothing would be worse.
+    Runner 会把返回的文本记为 ``delegate_to_llm`` 步骤的结果，因此下一次路由
+    能在历史中看到它；这里不执行任何东西。提供商故障会变成携带错误类别的
+    ``ValueError``，Runner 会让它逃出 ``run()``，服务再把它变成一次失败的运行
+    —— 一次默不作声、什么都没产出的委托只会更糟。
     """
 
     def __init__(self, client: Completer, model: str) -> None:
@@ -57,28 +56,24 @@ class LLMDelegate:
                 prompt=_delegation_prompt(state),
             )
         except LLMClientError as exc:
-            raise ValueError(f"delegation failed: {exc.category}") from exc
+            raise ValueError(f"委托失败：{exc.category}") from exc
         if not completion.text.strip():
             raise ValueError(
-                "the delegate handler returned no result; an empty completion from a "
-                "reasoning model usually means LLM_MAX_TOKENS was exhausted before "
-                "any content was produced"
+                "委托处理器没有返回结果；推理模型返回空补全通常意味着在任何"
+                "内容产出之前 LLM_MAX_TOKENS 就被耗尽"
             )
         return completion.text
 
 
 class LLMArgumentResolver:
-    """Synthesizes a tool call's arguments from the goal and the run's history.
+    """根据目标和运行历史合成一次工具调用的参数。
 
-    The model's output is untrusted input: it is returned unchanged and the
-    tool's own pydantic model stays the authority, so a synthesized argument
-    fails exactly as a hand-written one would. The schema in the prompt is
-    derived from that same model, so the prompt cannot advertise a field the
-    tool would refuse.
+    模型的输出是不可信输入：它原样返回，工具的 pydantic 模型仍然是权威，
+    因此合成出来的参数会像手写参数一样失败。提示词里的 schema 也派生自同一个
+    模型，所以提示词不可能宣告工具会拒绝的字段。
 
-    A completion that is not a JSON object, is empty, or names no field the tool
-    accepts raises rather than degrading to empty arguments — executing a tool
-    with nothing would be worse than a stopped run.
+    补全内容不是 JSON 对象、为空，或没有给出工具接受的任何字段时会抛错，
+    而不是退化成空参数 —— 拿空参数去执行工具比让运行停下来更糟。
     """
 
     def __init__(self, client: Completer, model: str, tools: ToolRegistry) -> None:
@@ -90,7 +85,7 @@ class LLMArgumentResolver:
         try:
             tool = self._tools.get(action)
         except KeyError as exc:
-            raise ValueError(f"action {action!r} is not registered") from exc
+            raise ValueError(f"动作 {action!r} 未注册") from exc
         try:
             completion = await self._client.complete(
                 model=self._model,
@@ -98,7 +93,7 @@ class LLMArgumentResolver:
                 prompt=_resolver_prompt(action, tool, state),
             )
         except LLMClientError as exc:
-            raise ValueError(f"argument synthesis failed: {exc.category}") from exc
+            raise ValueError(f"参数合成失败：{exc.category}") from exc
         return _parse_arguments(completion.text, tool.input_model)
 
 
@@ -151,10 +146,10 @@ def _state_prompt(state: TaskState) -> str:
 
 
 def _render_schema(model: type[BaseModel]) -> str:
-    """One line per field: type, required-ness, validity constraints, description.
+    """每个字段一行：类型、是否必填、有效性约束、描述。
 
-    Only what changes whether the tool accepts the value is rendered — titles
-    and `additionalProperties` are noise a model would pattern-match on.
+    只渲染会影响工具是否接受该值的部分 —— title 和 `additionalProperties`
+    只会被模型拿去做模式匹配，属于噪声。
     """
     schema = model.model_json_schema()
     required = set(schema.get("required", []))
@@ -189,22 +184,22 @@ def _render_schema(model: type[BaseModel]) -> str:
 def _parse_arguments(text: str, model: type[BaseModel]) -> dict[str, Any]:
     if not text.strip():
         raise ValueError(
-            "the completion was empty; a reasoning model with too small an "
-            "LLM_MAX_TOKENS spends its budget before producing content"
+            "补全内容为空；LLM_MAX_TOKENS 设得过小的推理模型会在产出内容"
+            "之前就把预算花光"
         )
     payload = _extract_object(text)
     if not payload:
-        raise ValueError("the completion did not contain a JSON object of arguments")
+        raise ValueError("补全内容中没有参数的 JSON 对象")
     known = set(model.model_json_schema().get("properties", {}))
     if not known & set(payload):
         raise ValueError(
-            f"the completion named no argument the tool accepts: {sorted(payload)}"
+            f"补全内容没有给出工具接受的任何参数：{sorted(payload)}"
         )
     return dict(payload)
 
 
 def _extract_object(text: str) -> dict[str, Any]:
-    """Read the JSON object out of a completion, fenced or not."""
+    """从补全内容中读出 JSON 对象，无论是否带代码围栏。"""
     for candidate in (text, _first_braced_object(text)):
         if candidate is None:
             continue
@@ -214,7 +209,7 @@ def _extract_object(text: str) -> dict[str, Any]:
             continue
         if isinstance(payload, dict):
             return payload
-    raise ValueError("the completion did not contain a JSON object of arguments")
+    raise ValueError("补全内容里没有一个 JSON 对象（可能是数组、裸值或带多余文字）")
 
 
 def _first_braced_object(text: str) -> str | None:

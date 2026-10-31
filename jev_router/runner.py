@@ -9,11 +9,11 @@ from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 from jev_router.clients.jev import JevClient, JevClientError
-from jev_router.policy import PolicyDecision, PolicyEngine, PolicyOutcome
+from jev_router.policy import PolicyDecision, PolicyEngine, PolicyOutcome, PolicyThresholds
 from jev_router.router import RouteDecision, Router
 from jev_router.serialization import jsonable
 from jev_router.state import ExecutionBudget, TaskState
-from jev_router.tools.base import RiskLevel, Tool
+from jev_router.tools.base import Tool
 from jev_router.tools.registry import ToolRegistry
 from jev_router.verifier import VerificationDecision, Verifier
 
@@ -27,11 +27,6 @@ RunStatus = Literal[
 ]
 
 DEFAULT_COMPLETION_THRESHOLD = 0.75
-
-# docs/security.md maps these tool risk levels to mandatory confirmation. The
-# Policy Engine phase deliberately left the coarse category unenforced, so the
-# Runner has to apply it before any side effect happens.
-_CONFIRMING_RISKS: frozenset[RiskLevel] = frozenset({"write", "external"})
 
 
 class ActionInputResolver(Protocol):
@@ -98,7 +93,7 @@ class RunResult:
 
 
 class _Stop(Exception):
-    """Non-local exit from a loop iteration, carrying a terminal run status."""
+    """跳出循环迭代的非局部出口，携带一个终态。"""
 
     def __init__(self, status: RunStatus, diagnostic: str | None = None) -> None:
         self.status = status
@@ -130,12 +125,11 @@ class _Draft:
 
 
 class Runner:
-    """Bounded route/policy/execute/verify loop over the injected Jev client.
+    """有界的 route / policy / execute / verify 循环。
 
-    The Runner owns when budgets are consumed and when the loop stops. Router,
-    PolicyEngine and Verifier are assembled here from a single shared
-    ToolRegistry so the execution-time registration recheck cannot be bypassed by
-    a divergent registry instance.
+    预算在何时消耗、循环在何时停止，都由这里决定。路由层、策略引擎与验证器
+    都从同一个 ToolRegistry 装配，因此「执行前再查一次注册表」这道检查无法被
+    另一个注册表实例绕开。
     """
 
     def __init__(
@@ -146,6 +140,7 @@ class Runner:
         tools: ToolRegistry,
         budget: ExecutionBudget,
         completion_threshold: float = DEFAULT_COMPLETION_THRESHOLD,
+        thresholds: PolicyThresholds | None = None,
         resolver: ActionInputResolver | None = None,
         confirmation: ConfirmationHandler | None = None,
         user_input: UserInputHandler | None = None,
@@ -153,11 +148,11 @@ class Runner:
         trace_sink: TraceSink | None = None,
     ) -> None:
         if not model or not model.strip():
-            raise ValueError("model must not be empty")
+            raise ValueError("model 不能为空")
         if not math.isfinite(completion_threshold) or not 0 <= completion_threshold <= 1:
-            raise ValueError("completion_threshold must be finite and between 0 and 1")
+            raise ValueError("completion_threshold 必须是 0 到 1 之间的有限数")
         if budget.max_model_calls < 2 * budget.max_steps:
-            raise ValueError("max_model_calls must allow one route and one verify per step")
+            raise ValueError("max_model_calls 至少要允许每步一次路由和一次验证")
         self._client = client
         self._model = model
         self._tools = tools
@@ -169,8 +164,9 @@ class Runner:
         self._delegate = delegate
         self._trace_sink = trace_sink
         self._router = Router(client, model, tools)
-        self._policy = PolicyEngine(tools)
+        self._policy = PolicyEngine(tools, thresholds)
         self._verifier = Verifier(client, model)
+
 
     async def run(
         self,
@@ -192,14 +188,14 @@ class Runner:
             draft = _Draft(step=step, task_id=identifier, state_snapshot=snapshot)
             try:
                 if budget.remaining_steps == 0 or budget.remaining_model_calls == 0:
-                    raise _Stop("budget_exhausted", "step or model-call budget is exhausted")
+                    raise _Stop("budget_exhausted", "步数或模型调用预算已耗尽")
                 budget = budget.consume_step()
                 budget = budget.consume_model_call()
 
                 try:
                     route = await self._router.route(snapshot)
                 except JevClientError as exc:
-                    raise _Stop("failed", f"route request failed: {exc.category}") from exc
+                    raise _Stop("failed", f"路由请求失败：{exc.category}") from exc
                 draft.route = route
                 policy = self._policy.evaluate(route)
                 draft.policy = policy
@@ -213,7 +209,7 @@ class Runner:
                     if answer is None:
                         raise _Stop(
                             "needs_user_input",
-                            "more user information was requested but not provided",
+                            "路由请求了更多用户信息，但没有拿到回答",
                         )
                     state = self._advance(state, "ask_user", {"user_input": answer})
                     draft.result = {"user_input": answer}
@@ -223,17 +219,17 @@ class Runner:
                 if policy.outcome == "delegate_to_llm":
                     if self._delegate is None:
                         raise _Stop(
-                            "failed", "delegation was requested but no handler is configured"
+                            "failed", "路由要求委托，但没有配置委托处理器"
                         )
                     if budget.remaining_model_calls == 0:
                         raise _Stop(
                             "budget_exhausted",
-                            "model-call budget is exhausted before delegation",
+                            "模型调用预算在委托之前就已耗尽",
                         )
                     budget = budget.consume_model_call()
                     answer = await self._delegate.delegate(state)
                     if answer is None:
-                        raise _Stop("failed", "the delegate handler returned no result")
+                        raise _Stop("failed", "委托处理器没有返回结果")
                     state = self._advance(state, "delegate_to_llm", answer)
                     draft.result = answer
                     self._collect(draft, started, traces)
@@ -244,17 +240,17 @@ class Runner:
                         draft, state, budget, policy, identifier
                     )
                 elif state.step == 0:
-                    # A finish recommendation with nothing to verify yet.
+                    # 路由建议 finish，但还没有任何可验证的步骤。
                     raise _Stop(
                         "completed",
-                        "the router considered the task complete before any step ran",
+                        "路由在任何步骤执行之前就认为任务已完成",
                     )
 
                 checked = await self._verify(state, budget, verified)
                 budget = checked.budget
                 draft.verification = checked.assessment
                 if checked.status is not None:
-                    raise _Stop(checked.status, checked.diagnostic or "verification did not pass")
+                    raise _Stop(checked.status, checked.diagnostic or "验证未通过")
                 assert checked.assessment is not None
                 if checked.assessment.completion_probability >= self._completion_threshold:
                     raise _Stop("completed")
@@ -275,7 +271,7 @@ class Runner:
     ) -> tuple[TaskState, ExecutionBudget]:
         tool = self._lookup(policy.action)
         if tool is None:
-            raise _Stop("rejected", f"action {policy.action!r} is no longer registered")
+            raise _Stop("rejected", f"动作 {policy.action!r} 已不在注册表中")
         arguments = await self._resolve_arguments(policy.action, state)
         if arguments is None:
             raise _Stop(
@@ -283,7 +279,7 @@ class Runner:
                 f"the resolver did not return an argument mapping for {policy.action!r}",
             )
         draft.arguments = arguments
-        if self._needs_confirmation(policy, tool):
+        if self._needs_confirmation(policy):
             approved = (
                 False
                 if self._confirmation is None
@@ -291,7 +287,7 @@ class Runner:
             )
             draft.confirmed = approved
             if not approved:
-                raise _Stop("needs_confirmation", "explicit confirmation was not granted")
+                raise _Stop("needs_confirmation", "没有得到显式确认")
         try:
             result = tool.execute(dict(arguments))
         except ValueError as exc:
@@ -313,7 +309,7 @@ class Runner:
             return _Verified(
                 budget=budget,
                 status="budget_exhausted",
-                diagnostic="model-call budget is exhausted before verification",
+                diagnostic="模型调用预算在验证之前就已耗尽",
             )
         budget = budget.consume_model_call()
         try:
@@ -322,20 +318,20 @@ class Runner:
             return _Verified(
                 budget=budget,
                 status="failed",
-                diagnostic=f"verification request failed: {exc.category}",
+                diagnostic=f"验证请求失败：{exc.category}",
             )
         except ValueError as exc:
             return _Verified(
                 budget=budget,
                 status="failed",
-                diagnostic=f"verification was rejected: {exc}",
+                diagnostic=f"验证被拒绝：{exc}",
             )
         if assessment.completion_probability < self._completion_threshold and verified is state:
             return _Verified(
                 budget=budget,
                 assessment=assessment,
                 status="failed",
-                diagnostic="the verifier reported no progress on an unchanged state",
+                diagnostic="状态没有变化，验证器也认为没有进展",
             )
         return _Verified(budget=budget, assessment=assessment)
 
@@ -369,10 +365,13 @@ class Runner:
             return None
 
     @staticmethod
-    def _needs_confirmation(policy: PolicyDecision, tool: Tool) -> bool:
-        if policy.outcome == "ask_confirmation":
-            return True
-        return tool.risk in _CONFIRMING_RISKS
+    def _needs_confirmation(policy: PolicyDecision) -> bool:
+        """是否需要人工确认，只由策略引擎的结论决定。
+
+        这里刻意不再重复「工具风险等级」的判断：同一套规则写在两个地方，
+        迟早会在其中一处被人改掉，而另一处继续按老规则放行。
+        """
+        return policy.outcome == "ask_confirmation"
 
     @staticmethod
     def _routing_state(state: TaskState) -> dict[str, Any]:

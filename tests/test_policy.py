@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from jev_router.policy import PolicyEngine
+from jev_router.policy import PolicyEngine, PolicyThresholds
 from jev_router.router import RouteDecision
 from jev_router.tools.base import ToolResult
 from jev_router.tools.registry import ToolRegistry
@@ -138,3 +138,69 @@ def test_policy_never_executes_tools(setup_policy: tuple[PolicyEngine, StubTool]
         policy.evaluate(decision_route)
 
     assert not tool.executed
+
+
+class _RiskyTool(StubTool):
+    """同一份实现，只改声明出来的副作用等级。"""
+
+    def __init__(self, risk: str) -> None:
+        super().__init__()
+        self.risk = risk
+
+
+@pytest.mark.parametrize("risk", ["write", "external"])
+def test_declared_tool_risk_forces_confirmation(risk: str) -> None:
+    """工具自报的等级优先于模型给出的低风险分。
+
+    这是「确认 0/17」那类缺陷的结构性修复：只要工具声明了 write/external，
+    即使路由认为它无害、置信度极高，也必须走确认。
+    """
+    tool = _RiskyTool(risk)
+    policy = PolicyEngine(ToolRegistry([tool]))
+
+    decision = policy.evaluate(
+        route(requires_confirmation=0.0, risk=0.0, confidence=1.0, needs_reasoning=0.0)
+    )
+
+    assert decision.outcome == "ask_confirmation"
+    assert risk in decision.reason
+
+
+def test_read_tool_is_still_governed_by_probabilities() -> None:
+    policy = PolicyEngine(ToolRegistry([_RiskyTool("read")]))
+
+    assert policy.evaluate(route()).outcome == "execute"
+
+
+def test_thresholds_are_configurable() -> None:
+    policy = PolicyEngine(
+        ToolRegistry([_RiskyTool("read")]),
+        PolicyThresholds(confirmation=0.90, risk=3.5, reasoning=0.30, confidence=0.95),
+    )
+
+    # 收紧后的置信度阈值：0.94 不再足以自动执行。
+    assert policy.evaluate(route(confidence=0.94)).outcome == "delegate_to_llm"
+    # 收紧后的推理阈值：0.40 已经越过 0.30。
+    assert policy.evaluate(route(needs_reasoning=0.4)).outcome == "delegate_to_llm"
+    # 收紧后的确认阈值：0.85 仍低于 0.90，不触发；0.95 触发。
+    assert (
+        policy.evaluate(route(requires_confirmation=0.85, confidence=1.0)).outcome == "execute"
+    )
+    assert (
+        policy.evaluate(route(requires_confirmation=0.95, confidence=1.0)).outcome
+        == "ask_confirmation"
+    )
+
+
+def test_thresholds_reject_out_of_range_values() -> None:
+    with pytest.raises(ValueError):
+        PolicyThresholds(confirmation=1.5)
+    with pytest.raises(ValueError):
+        PolicyThresholds(risk=9.0)
+
+
+def test_policy_exposes_its_thresholds() -> None:
+    thresholds = PolicyThresholds(confirmation=0.6)
+
+    assert PolicyEngine(ToolRegistry(), thresholds).thresholds is thresholds
+    assert PolicyThresholds().as_dict()["risk"] == 2.5
