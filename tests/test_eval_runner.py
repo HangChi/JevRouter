@@ -109,17 +109,54 @@ async def test_jev_mode_records_a_matching_case(tmp_path: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_confirmation_mismatch_fails_the_case(tmp_path: Any) -> None:
+async def test_a_write_tool_confirms_even_when_the_router_calls_it_harmless(
+    tmp_path: Any,
+) -> None:
+    """风险下限压过模型的自我评估。
+
+    路由把这个写操作说成「几乎无副作用」，但工具自己声明了 ``write``；
+    度量必须和真正执行时一样要求确认，否则评测会给出一个线上不成立的结论。
+    """
     fake = FakeJev()
-    # A write action the router reports as harmless: the policy executes it, but
-    # the case demands confirmation, so the case must not count as a success.
     queue(fake, "write_file", risk=1.0, requires_confirmation=0.1)
-    subject = runner(tmp_path, (case(expected="write_file", allowed=("write_file",), requires_confirmation=True),), fake, None)
+    subject = runner(
+        tmp_path,
+        (case(expected="write_file", allowed=("write_file",), requires_confirmation=True),),
+        fake,
+        None,
+    )
     report = await subject.run("jev")
 
     outcome = report.outcomes[0]
-    assert outcome.policy_outcome == "execute"
-    assert outcome.confirmation_requested is False
+    assert outcome.policy_outcome == "ask_confirmation"
+    assert outcome.confirmation_requested is True
+    assert outcome.tool_risk == "write"
+    assert outcome.succeeded is True
+
+
+@pytest.mark.asyncio
+async def test_confirmation_mismatch_fails_the_case(tmp_path: Any) -> None:
+    fake = FakeJev()
+    # 用例声称不需要确认，但它落的写工具按规则必须确认，于是这一条的确认行为
+    # 与期望不符，不能算成功。
+    queue(fake, "write_file", risk=1.0, requires_confirmation=0.1)
+    subject = runner(
+        tmp_path,
+        (
+            case(
+                expected="write_file",
+                allowed=("write_file",),
+                requires_confirmation=False,
+            ),
+        ),
+        fake,
+        None,
+    )
+    report = await subject.run("jev")
+
+    outcome = report.outcomes[0]
+    assert outcome.policy_outcome == "ask_confirmation"
+    assert outcome.confirmation_requested is True
     assert outcome.matched_allowed is True
     assert outcome.succeeded is False
     assert report.metrics.jev is not None
@@ -194,12 +231,12 @@ async def test_compare_mode_runs_both_routers_and_measures_agreement(tmp_path: A
     assert {outcome.mode for outcome in report.outcomes} == {"jev", "llm"}
     assert report.metrics.jev is not None and report.metrics.jev.case_count == 2
     assert report.metrics.llm is not None and report.metrics.llm.case_count == 2
-    # The baseline answered web_search both times, so it agrees on case-2 only.
+    # 基线两次都回答了 web_search，因此只在 case-2 上一致。
     assert report.metrics.compared_count == 2
     assert report.metrics.agreement_count == 1
     assert report.metrics.agreement_rate == 0.5
     assert report.metrics.disagreement_case_ids == ("case-1",)
-    # The baseline has no policy outcome, so those metrics stay absent.
+    # 基线没有策略结果，因此这些指标保持缺省。
     assert report.metrics.llm is not None
     assert report.metrics.llm.escalation_count is None
     assert report.metrics.llm.confirmation_requested_count is None
@@ -208,7 +245,7 @@ async def test_compare_mode_runs_both_routers_and_measures_agreement(tmp_path: A
 @pytest.mark.asyncio
 async def test_compare_mode_skips_agreement_when_a_router_errored(tmp_path: Any) -> None:
     fake = FakeJev()
-    # No queued route answer, so the Jev side fails; the baseline still answers.
+    # 没有排队的路由应答，因此 Jev 一侧失败；基线仍会作答。
     subject = runner(tmp_path, (case(),), fake, "calculator")
     report = await subject.run("compare")
 

@@ -102,8 +102,8 @@ def test_escalation_and_confirmation_counts() -> None:
     outcomes = [
         outcome("case-1", policy_outcome="execute"),
         outcome("case-2", policy_outcome="ask_confirmation", requires_confirmation=True),
-        # Two deliberate mismatches: a risky action executed without asking, and
-        # a harmless action that asked anyway.
+        # 两个刻意构造的不匹配：一个风险动作未经询问就执行，以及
+        # 一个无害动作却仍然发起了询问。
         outcome("case-3", policy_outcome="execute", requires_confirmation=True),
         outcome("case-4", policy_outcome="ask_confirmation"),
         outcome("case-5", policy_outcome="delegate_to_llm"),
@@ -142,7 +142,7 @@ def test_errors_count_and_leave_tokens_absent() -> None:
     assert jev.error_rate == 1.0
     assert jev.input_tokens is None
     assert jev.output_tokens is None
-    # Latency is measured even when the call failed.
+    # 即使调用失败，也会测量延迟。
     assert jev.latency.mean_ms == 100.0
 
 
@@ -165,7 +165,7 @@ def test_percentiles_use_nearest_rank() -> None:
     assert latency is not None
     assert latency.latency.max_ms == 10
     assert latency.latency.mean_ms == 5.5
-    # Nearest rank over 10 samples: p50 is the 5th, p95 the 10th.
+    # 10 个样本取最近秩：p50 是第 5 个，p95 是第 10 个。
     assert latency.latency.p50_ms == 5
     assert latency.latency.p95_ms == 10
 

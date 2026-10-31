@@ -9,11 +9,10 @@ REPORT_VERSION = 1
 
 
 def report_to_dict(report: EvalReport) -> dict[str, Any]:
-    """Serialize a report into the versioned envelope the API records.
+    """把一份报告序列化成 API 记录的版本化信封。
 
-    The rates are written out rather than left as derived properties so a stored
-    report is self-describing: reading it later must not require this build's
-    arithmetic to interpret it.
+    各比率是显式写出来的，而不是留给派生属性：落库后的报告要能自我描述，
+    以后再读它不应该依赖当时那个版本的算术。
     """
     return {
         "version": REPORT_VERSION,
@@ -40,12 +39,20 @@ def report_to_dict(report: EvalReport) -> dict[str, Any]:
                     "input_tokens": outcome.input_tokens,
                     "output_tokens": outcome.output_tokens,
                     "error": outcome.error,
+                    "confidence": outcome.confidence,
+                    "risk": outcome.risk,
+                    "requires_confirmation_probability": (
+                        outcome.requires_confirmation_probability
+                    ),
+                    "needs_reasoning_probability": outcome.needs_reasoning_probability,
+                    "tool_risk": outcome.tool_risk,
                 }
                 for outcome in report.outcomes
             ],
             "metrics": _metrics_to_dict(report.metrics),
         },
     }
+
 
 
 def _metrics_to_dict(metrics: ComparisonMetrics) -> dict[str, Any]:

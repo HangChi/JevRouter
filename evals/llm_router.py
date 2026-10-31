@@ -21,11 +21,11 @@ _RESULT_LIMIT = 500
 
 
 class LLMRouterError(Exception):
-    """The baseline could not turn a completion into a valid action choice."""
+    """基线无法把一次补全变成合法的动作选择。"""
 
 
 class Completer(Protocol):
-    """The slice of ``LLMClient`` the baseline needs, so tests can supply a double."""
+    """基线所需的 ``LLMClient`` 子集，便于测试注入替身。"""
 
     async def complete(
         self, *, model: str, system: str, prompt: str, max_tokens: int | None = ...
@@ -34,10 +34,9 @@ class Completer(Protocol):
 
 @dataclass(frozen=True)
 class LLMRouteDecision:
-    """The baseline's answer.
+    """基线的回答。
 
-    It deliberately carries no probabilities: an LLM baseline has none, and the
-    comparison must not invent them.
+    它刻意不携带任何概率：LLM 基线本来就没有概率，对比时也不该凭空编造。
     """
 
     action: str
@@ -49,16 +48,15 @@ class LLMRouteDecision:
 
 
 class LLMRouter:
-    """Routes with an LLM instead of Jev, over the same candidate set.
+    """用 LLM 而非 Jev 做路由，候选集完全相同。
 
-    The candidate set is built exactly like ``jev_router.Router``'s — the
-    registered tools plus the three control actions — so a comparison measures
-    the decision, not a different menu.
+    候选集的构造方式与 ``jev_router.Router`` 完全一致 —— 注册的工具加上三个
+    控制动作 —— 这样对比衡量的是决策本身，而不是不同的选项菜单。
     """
 
     def __init__(self, client: Completer, model: str, tools: ToolRegistry) -> None:
         if not model or not model.strip():
-            raise ValueError("model must not be empty")
+            raise ValueError("model 不能为空")
         self._client = client
         self._model = model
         self._tools = tools
@@ -143,14 +141,14 @@ def _parse(text: str, candidates: Mapping[str, str]) -> tuple[str, str]:
     action = payload.get("action")
     reason = payload.get("reason", "")
     if not isinstance(action, str) or action not in candidates:
-        raise LLMRouterError(f"the completion did not name a candidate action: {action!r}")
+        raise LLMRouterError(f"补全内容没有给出候选动作：{action!r}")
     if not isinstance(reason, str):
-        raise LLMRouterError("the completion's reason must be a string")
+        raise LLMRouterError("补全内容中的 reason 必须是字符串")
     return action, reason
 
 
 def _extract_object(text: str) -> Mapping[str, Any]:
-    """Read the JSON object out of a completion, fenced or not."""
+    """从补全内容中读出 JSON 对象，无论是否带代码围栏。"""
     for candidate in (text, _first_braced_object(text)):
         if candidate is None:
             continue
@@ -160,7 +158,7 @@ def _extract_object(text: str) -> Mapping[str, Any]:
             continue
         if isinstance(payload, dict):
             return payload
-    raise LLMRouterError("the completion did not contain a JSON object")
+    raise LLMRouterError("补全内容中没有 JSON 对象")
 
 
 def _first_braced_object(text: str) -> str | None:

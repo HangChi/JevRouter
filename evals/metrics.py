@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:  # breaks the import cycle: the runner imports the aggregation
+if TYPE_CHECKING:  # 打破导入环：runner 会导入聚合逻辑
     from evals.runner import CaseOutcome
 
 JEVMODE = "jev"
@@ -14,11 +14,10 @@ LLMMODE = "llm"
 
 @dataclass(frozen=True)
 class LatencyStats:
-    """Millisecond statistics over one mode's cases.
+    """某一模式下所有用例的毫秒级统计。
 
-    Percentiles use the nearest-rank method: the p95 of 50 samples is the 48th
-    value in sorted order. It is deliberately simple — these numbers compare
-    modes against each other, not against a specification.
+    百分位采用最近秩方法：50 个样本的 p95 就是排序后的第 48 个值。
+    它刻意保持简单 —— 这些数字是用来横向比较各模式的，而不是对照某个规格。
     """
 
     mean_ms: float
@@ -35,11 +34,10 @@ class TokenStats:
 
 @dataclass(frozen=True)
 class ModeMetrics:
-    """Everything one router did across the case set.
+    """一个路由层在整个用例集上的全部表现。
 
-    Policy fields are ``None`` for the LLM baseline: it produces no probabilities,
-    so it has no policy outcome to escalate or confirm. Reporting that as zero
-    would claim a fact the baseline cannot have.
+    对 LLM 基线而言策略相关字段是 ``None``：它不产出概率，因此没有可升级或
+    可确认的策略结论。把它报成 0 等于宣称一个基线不可能拥有的事实。
     """
 
     mode: str
@@ -81,10 +79,10 @@ class ModeMetrics:
 
 @dataclass(frozen=True)
 class ComparisonMetrics:
-    """Per-mode metrics plus how often the two routers agreed.
+    """各模式的指标，以及两个路由层的一致程度。
 
-    ``agreement_rate`` is ``None`` unless both modes answered at least one case,
-    because "0%" and "never compared" are different statements.
+    除非两种模式都至少回答了一个用例，否则 ``agreement_rate`` 为 ``None``，
+    因为“0%”和“从未比较过”是两种不同的陈述。
     """
 
     jev: ModeMetrics | None

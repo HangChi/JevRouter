@@ -11,7 +11,7 @@ from evals.cases import EvalCase
 from evals.llm_router import LLMRouter
 from evals.metrics import ComparisonMetrics, summarize
 from jev_router.clients.jev import JevClientError
-from jev_router.policy import PolicyEngine
+from jev_router.policy import PolicyEngine, PolicyThresholds
 from jev_router.router import Router
 from jev_router.serialization import jsonable
 from jev_router.tools.registry import ToolRegistry
@@ -21,17 +21,21 @@ EvalMode = Literal["jev", "llm", "compare"]
 JEVMODE = "jev"
 LLMMODE = "llm"
 
-# Outcomes that stop automatic execution and hand control to a human or the LLM.
-# `finish` is completion, and `reject` is a failure, so neither is an escalation.
+# 会中断自动执行、把控制权交给人工或 LLM 的结局。
+# `finish` 是完成，`reject` 是失败，两者都不算升级。
 _ESCALATING_OUTCOMES = frozenset({"ask_confirmation", "delegate_to_llm", "ask_user"})
 
 
 @dataclass(frozen=True)
 class CaseOutcome:
-    """What one router did with one case.
+    """一个路由层在一个用例上的全部产出。
 
-    ``mode`` is the router that produced the row, so a compare run stores both
-    rows for a case and the aggregation pairs them by ``case_id``.
+    ``mode`` 标出这条记录来自哪个路由层，因此 compare 运行会把同一个用例的
+    两行都存下来，聚合时按 ``case_id`` 配对。
+
+    末尾那五个信号字段是「原始证据」：置信度、风险分、确认概率、推理概率、
+    工具风险等级。策略结果是由它们推出来的，把它们一起存下来，阈值校准才能
+    离线重放而不必再花一次 provider 调用。
     """
 
     case_id: str
@@ -51,6 +55,12 @@ class CaseOutcome:
     input_tokens: int | None
     output_tokens: int | None
     error: str | None
+    confidence: float | None = None
+    risk: float | None = None
+    requires_confirmation_probability: float | None = None
+    needs_reasoning_probability: float | None = None
+    tool_risk: str | None = None
+
 
 
 @dataclass(frozen=True)
@@ -63,12 +73,11 @@ class EvalReport:
 
 
 class EvalRunner:
-    """Replays the case set through the routers it is given.
+    """把用例集重放进给定的路由层。
 
-    The routers, the policy engine and the tool registry are the same objects
-    the agent uses; the eval adds no behaviour, it only records what came back.
-    A router that raises produces an error outcome instead of aborting the run,
-    so one bad case cannot hide the other forty-nine.
+    路由层、策略引擎与工具注册表都是 agent 本身在用的那些对象，评测不引入
+    任何新行为，只记录回来的东西。某个路由层抛异常时会产出一条错误记录而不是
+    中断整轮，这样一个坏用例不会把另外四十九条一起藏起来。
     """
 
     def __init__(
@@ -78,13 +87,16 @@ class EvalRunner:
         tools: ToolRegistry,
         jev_router: Router | None = None,
         llm_router: LLMRouter | None = None,
+        thresholds: PolicyThresholds | None = None,
     ) -> None:
         if not cases:
             raise ValueError("at least one case is required")
         self._cases = tuple(cases)
+        self._tools = tools
         self._jev = jev_router
         self._llm = llm_router
-        self._policy = PolicyEngine(tools)
+        self._policy = PolicyEngine(tools, thresholds)
+
 
     async def run(self, mode: EvalMode, *, run_id: str | None = None) -> EvalReport:
         if mode in (JEVMODE, "compare") and self._jev is None:
@@ -109,10 +121,11 @@ class EvalRunner:
         started = time.monotonic()
         try:
             route = await self._require_jev().route(_routing_state(case))
-        except Exception as exc:  # noqa: BLE001 - one bad case must not abort the run
+        except Exception as exc:  # noqa: BLE001 - 一个坏用例不能中断整轮
             return _error_outcome(case, JEVMODE, exc, _elapsed(started))
         latency_ms = _elapsed(started)
         policy = self._policy.evaluate(route)
+        # 确认与否完全取自策略引擎的结论，与执行循环走的是同一条判断路径。
         confirmation_requested = policy.outcome == "ask_confirmation"
         return CaseOutcome(
             case_id=case.id,
@@ -135,13 +148,18 @@ class EvalRunner:
             input_tokens=route.input_tokens,
             output_tokens=route.output_tokens,
             error=None,
+            confidence=route.confidence,
+            risk=route.risk,
+            requires_confirmation_probability=route.requires_confirmation,
+            needs_reasoning_probability=route.needs_reasoning,
+            tool_risk=_tool_risk(self._tools, route.action),
         )
 
     async def _run_llm(self, case: EvalCase) -> CaseOutcome:
         started = time.monotonic()
         try:
             decision = await self._require_llm().route(_routing_state(case))
-        except Exception as exc:  # noqa: BLE001 - one bad case must not abort the run
+        except Exception as exc:  # noqa: BLE001 - 一个坏用例不能中断整轮
             return _error_outcome(case, LLMMODE, exc, _elapsed(started))
         return CaseOutcome(
             case_id=case.id,
@@ -161,7 +179,9 @@ class EvalRunner:
             input_tokens=decision.input_tokens,
             output_tokens=decision.output_tokens,
             error=None,
+            tool_risk=_tool_risk(self._tools, decision.action),
         )
+
 
     def _require_jev(self) -> Router:
         assert self._jev is not None
@@ -173,7 +193,7 @@ class EvalRunner:
 
 
 def _routing_state(case: EvalCase) -> dict[str, Any]:
-    """The same routing payload the Runner sends, for a case's first step."""
+    """与执行循环发出的路由载荷一致，对应用例的第一步。"""
     return {
         "goal": case.goal,
         "step": 0,
@@ -181,6 +201,17 @@ def _routing_state(case: EvalCase) -> dict[str, Any]:
         "history": [],
         "last_result": None,
     }
+
+
+def _tool_risk(tools: ToolRegistry, action: str | None) -> str | None:
+    """动作背后的工具风险等级；控制动作与非注册动作没有工具，返回 ``None``。"""
+    if action is None:
+        return None
+    try:
+        return tools.get(action).risk
+    except KeyError:
+        return None
+
 
 
 def _error_outcome(

@@ -7,7 +7,7 @@ from evals import cli
 
 
 class FakeJevRouter:
-    """Routes every case to `calculator` without touching a provider."""
+    """把每个用例都路由到 `calculator`，完全不接触任何提供方。"""
 
     async def route(self, state: Any) -> Any:
         from jev_router.router import RouteDecision
@@ -49,7 +49,7 @@ def test_missing_credentials_are_a_configuration_error(monkeypatch: Any, capsys:
     monkeypatch.delenv("JEV_API_KEY", raising=False)
     code = cli.main(["--mode", "jev"])
     assert code == cli.EXIT_CONFIGURATION
-    assert "configuration error" in capsys.readouterr().err
+    assert "配置有问题" in capsys.readouterr().err
 
 
 def test_missing_llm_credentials_are_a_configuration_error(monkeypatch: Any, capsys: Any) -> None:
@@ -57,7 +57,7 @@ def test_missing_llm_credentials_are_a_configuration_error(monkeypatch: Any, cap
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     code = cli.main(["--mode", "llm"])
     assert code == cli.EXIT_CONFIGURATION
-    assert "configuration error" in capsys.readouterr().err
+    assert "配置有问题" in capsys.readouterr().err
 
 
 def test_non_positive_limit_is_refused() -> None:
@@ -66,7 +66,7 @@ def test_non_positive_limit_is_refused() -> None:
 
 def test_missing_case_file_is_a_configuration_error(capsys: Any) -> None:
     assert cli.main(["--cases", "/nonexistent/cases.json"]) == cli.EXIT_CONFIGURATION
-    assert "case file error" in capsys.readouterr().err
+    assert "用例文件有问题" in capsys.readouterr().err
 
 
 def test_clean_run_writes_a_versioned_report(
@@ -82,13 +82,13 @@ def test_clean_run_writes_a_versioned_report(
     assert payload["version"] == 1
     data = payload["data"]
     assert data["mode"] == "compare"
-    assert len(data["outcomes"]) == 6  # three cases, two routers
+    assert len(data["outcomes"]) == 6  # 三个用例，两个路由层
     assert data["metrics"]["agreement_count"] == 3
     assert data["metrics"]["jev"]["case_count"] == 3
     assert data["metrics"]["jev"]["expected_match_rate"] == 1.0
     summary = capsys.readouterr().out
-    assert "agreement 3/3" in summary
-    assert "report written to" in summary
+    assert "一致率 3/3" in summary
+    assert "报告已写入" in summary
 
 
 def test_unwritable_output_directory_is_refused(monkeypatch: Any) -> None:
@@ -105,11 +105,11 @@ def test_a_run_with_errors_exits_non_zero(monkeypatch: Any, capsys: Any) -> None
     monkeypatch.setattr(cli, "_jev_router", lambda model: BrokenRouter())
     code = cli.main(["--mode", "jev", "--limit", "2"])
     assert code == cli.EXIT_CASE_ERRORS
-    assert "case(s) errored" in capsys.readouterr().err
+    assert "条用例出错" in capsys.readouterr().err
 
 
 def test_real_routers_are_constructible_without_credentials(monkeypatch: Any) -> None:
-    """The factory helpers are exercised by the CLI; here they must fail closed."""
+    """工厂辅助函数由 CLI 调用；在这里它们必须失败关闭。"""
     monkeypatch.delenv("JEV_API_KEY", raising=False)
     from jev_router.clients.jev import JevClientError
 
@@ -117,7 +117,7 @@ def test_real_routers_are_constructible_without_credentials(monkeypatch: Any) ->
         cli._jev_router("some-model")
     except JevClientError:
         pass
-    else:  # pragma: no cover - defensive
+    else:  # pragma: no cover - 防御性分支
         raise AssertionError("a missing credential must fail closed")
 
 
