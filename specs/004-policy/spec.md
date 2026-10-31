@@ -1,46 +1,46 @@
-# Feature Specification: Policy Engine
+# 功能规格：策略引擎
 
-**Feature Branch**: `004-policy`
-**Status**: Complete
+**功能分支**：`004-policy`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Convert a Router recommendation into a deterministic local control outcome, using explicit MVP thresholds and the trusted tool registry. The Policy Engine must not execute tools or interpret policy approval as user confirmation.
+使用显式的 MVP 阈值和可信工具注册表，把路由层（Router）的建议转换为确定性的本地控制结果。策略引擎不得执行工具，也不得把策略层面的批准理解为用户确认。
 
-## User Stories
+## 用户故事
 
-### US1 - Gate a recommended tool action
+### US1 - 对建议的工具动作进行门控
 
-As an application developer, I need local thresholds to decide whether a registered recommendation may proceed, needs confirmation, or should be delegated.
+作为应用开发者，我需要本地阈值来判定某条已注册的建议可以继续执行、需要确认，还是应当委托出去。
 
-Acceptance scenarios:
-1. A registered tool recommendation below all thresholds yields `execute`.
-2. A confirmation probability above 0.75 or risk score at least 2.5 yields `ask_confirmation`.
-3. A reasoning probability above 0.70 or route confidence below 0.75 yields `delegate_to_llm` when confirmation is not required.
-4. Equality follows the specified strict and non-strict comparisons.
+验收场景：
+1. 一条低于所有阈值的已注册工具建议产出 `execute`。
+2. 确认概率高于 0.75 或风险分数至少为 2.5 时，产出 `ask_confirmation`。
+3. 在不需要确认的情况下，推理概率高于 0.70 或路由置信度低于 0.75 时，产出 `delegate_to_llm`。
+4. 相等情形遵循所规定的严格与非严格比较。
 
-### US2 - Keep control and authority local
+### US2 - 将控制权与权威保留在本地
 
-As an application developer, I need explicit control-action mappings and fail-closed handling of unavailable tools so Jev output cannot trigger an unknown action.
+作为应用开发者，我需要显式的控制动作映射，以及对不可用工具采取失败即拒绝的处理，使 Jev 的输出无法触发未知动作。
 
-Acceptance scenarios:
-1. `ask_user`, `delegate_to_llm`, and `finish` map to corresponding outcomes.
-2. An action absent from the current trusted registry yields `reject`.
-3. Policy returns an outcome only; it never invokes a tool or completes a user-confirmation step.
+验收场景：
+1. `ask_user`、`delegate_to_llm` 和 `finish` 映射到相应的结果。
+2. 当前可信注册表中不存在的动作会产出 `reject`。
+3. 策略只返回一个结果；它从不调用工具，也不完成用户确认步骤。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide a synchronous policy evaluator over `RouteDecision` and `ToolRegistry`.
-- **FR-002**: Return an immutable typed decision with finite outcome, action, and reason.
-- **FR-003**: Use MVP thresholds: confirmation > 0.75, risk >= 2.5, reasoning > 0.70, and route confidence < 0.75.
-- **FR-004**: Apply confirmation/risk checks before delegation checks.
-- **FR-005**: Reject recommended tool actions that are not currently registered.
-- **FR-006**: Map the three Router control actions to their control outcomes.
-- **FR-007**: Never execute tools or imply explicit user approval.
-- **FR-008**: Tests cover outcomes, boundaries, precedence, registry changes, and no execution.
+- **FR-001**：提供一个基于 `RouteDecision` 和 `ToolRegistry` 的同步策略求值器。
+- **FR-002**：返回一个不可变的类型化决策，包含有限的结果、动作和原因。
+- **FR-003**：使用 MVP 阈值：confirmation > 0.75、risk >= 2.5、reasoning > 0.70，以及路由置信度 < 0.75。
+- **FR-004**：委托检查之前先执行确认／风险检查。
+- **FR-005**：拒绝那些当前未注册的建议工具动作。
+- **FR-006**：把三个路由层控制动作映射到各自的控制结果。
+- **FR-007**：绝不执行工具，也不暗示已获得用户的显式批准。
+- **FR-008**：测试覆盖各种结果、边界、优先级、注册表变化，以及不发生执行。
 
-## Success Criteria
+## 成功标准
 
-- Policy results are deterministic for a route and the current registry.
-- All threshold equality cases are covered by offline tests.
-- Ruff, strict mypy, and the full offline test suite pass.
+- 对给定路由和当前注册表，策略结果是确定性的。
+- 所有阈值相等的情形都由离线测试覆盖。
+- Ruff、严格模式的 mypy 以及完整的离线测试套件通过。

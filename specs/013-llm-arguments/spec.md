@@ -1,109 +1,93 @@
-# Feature Specification: LLM Argument Synthesis
+# 功能规格说明：LLM 参数合成
 
-**Feature Branch**: `013-llm-arguments`
-**Status**: Complete
+**功能分支**：`013-llm-arguments`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Close the last functional gap: make the agent able to execute a tool in a real
-deployment. `jev_router` exposes an `ActionInputResolver` seam because a
-`RouteDecision` carries an action name and no arguments, and argument synthesis
-is an LLM responsibility — but nothing has ever filled that seam, so
-`create_app()` defaults to `{}` and every tool call fails with
-`tool 'X' rejected its input`. This phase fills it with an LLM-backed resolver
-built on the client phase 11 added, gated by the same settings as delegation.
+补齐最后一项功能缺口：让 agent 在真实部署中能够执行工具。`jev_router` 之所以
+暴露 `ActionInputResolver` 这个接缝，是因为 `RouteDecision` 只携带动作名、不携带
+参数，而参数合成是 LLM 的职责——但这个接缝从未被填充，因此 `create_app()`
+默认使用 `{}`，每次工具调用都以 `tool 'X' rejected its input` 失败。本阶段用
+基于 LLM 的解析器填充它，该解析器构建在第 11 阶段新增的客户端之上，并由与委托
+相同的配置项控制。
 
-## Background
+## 背景
 
-`docs/development.md` records the deferral explicitly: "`ActionInputResolver` 是
-参数合成的接缝……本阶段不实现 `clients/llm.py`". Phase 11 built that client for
-the eval baseline and the delegate handler; the resolver is its third consumer
-and the one the run path cannot work without.
+`docs/development.md` 明确记录了这一推迟："`ActionInputResolver` 是
+参数合成的接缝……本阶段不实现 `clients/llm.py`"。第 11 阶段为评测基线和
+委托处理器构建了该客户端；解析器是它的第三个使用方，也是运行路径离开它就无法
+工作的那一个。
 
-The resolver needs to tell the model what arguments a tool accepts. The `Tool`
-protocol exposes `name`, `description` and `risk` but nothing about its input, so
-a model can only guess field names and every call would fail validation. The
-protocol therefore gains the input model the tool already validates against —
-single source of truth, impossible to drift from the check that actually runs.
+解析器需要告诉模型某个工具接受哪些参数。`Tool` 协议暴露了 `name`、
+`description` 和 `risk`，但对它的输入一无所知，因此模型只能猜测字段名，每次调用
+都会校验失败。于是该协议新增工具本就据以校验的输入模型——单一事实来源，
+不可能与真正执行的检查发生漂移。
 
-## Scope
+## 范围
 
-In scope:
+范围内：
 
-- `Tool` gains `input_model: type[BaseModel]`; the five MVP tools declare theirs.
-- Field descriptions on the four input models, so the generated schema carries
-  the constraints prose a model needs (a relative `write_file` path, the
-  expression grammar, the search semantics) instead of bare types.
-- `apps/api/llm.py`: the LLM-backed Runner collaborators — the argument resolver
-  and the delegate handler phase 11 put in `service.py`.
-- Wiring: both are assembled from the same `llm`/`llm_model` settings pair, and
-  both stay absent when the LLM is unconfigured.
-- Tests for the prompt, the parse, the failure paths and an end-to-end run that
-  executes a real tool through the HTTP boundary.
+- `Tool` 新增 `input_model: type[BaseModel]`；五个 MVP 工具各自声明自己的。
+- 为四个输入模型添加字段描述，使生成的 schema 携带散文式的约束说明（相对的
+  `write_file` 路径、表达式语法、搜索语义），而不是只有裸类型，这些说明正是
+  模型所需要的。
+- `apps/api/llm.py`：基于 LLM 的执行循环（Runner）协作者——参数解析器，以及
+  第 11 阶段放在 `service.py` 里的委托处理器。
+- 接线：二者都由同一组 `llm`/`llm_model` 配置构建，并且在 LLM 未配置时都不存在。
+- 针对提示词、解析、失败路径，以及通过 HTTP 边界执行真实工具的端到端运行的测试。
 
-Out of scope:
+范围外：
 
-- A second settings switch for the resolver: one LLM configuration drives both
-  collaborators, because an agent that can reason but not parameterize is not
-  useful.
-- Any change to `Runner`, the tools' validation, or the Policy Engine.
+- 为解析器单独增设一个配置开关：一份 LLM 配置同时驱动这两个协作者，因为一个
+  能推理却无法参数化的 agent 没有用处。
+- 对 `Runner`、工具的校验逻辑或策略引擎的任何改动。
 
-## User Stories
+## 用户故事
 
-### US1 - Execute a tool with synthesized arguments
+### US1 - 用合成出的参数执行工具
 
-As an operator, I need a routed action to be executed with arguments the LLM
-synthesized from the goal and history, so a run does something instead of
-stopping at "the tool rejected its input".
+作为运维者，我需要被路由出的动作能用 LLM 依据目标和历史合成出的参数执行，
+这样一次运行才能真正做事，而不是停在“工具拒绝了它的输入”。
 
-Acceptance scenarios:
+验收场景：
 
-1. With an LLM configured, a route to `calculator` produces
-   `{"expression": ...}` from the model and the tool executes.
-2. The prompt carries the goal, the step, the history, the action, the tool's
-   description and its input schema with field descriptions.
-3. The arguments that reach the tool are the model's, and the trace records them
-   in `arguments` as it already does for an injected resolver.
+1. 在配置了 LLM 的情况下，路由到 `calculator` 会从模型得到
+   `{"expression": ...}`，并且工具成功执行。
+2. 提示词携带目标、步骤、历史、动作、工具的描述，以及带字段描述的输入 schema。
+3. 到达工具的参数就是模型的参数，trace 会像对待注入式解析器那样，把它们记录在
+   `arguments` 中。
 
-### US2 - Fail visibly when synthesis fails
+### US2 - 合成失败时显式失败
 
-As an operator, I need a failed synthesis to stop the run with a diagnostic
-rather than execute a tool with guessed arguments.
+作为运维者，我需要合成失败时以诊断信息停止运行，而不是用猜出来的参数去执行工具。
 
-Acceptance scenarios:
+验收场景：
 
-1. A provider error becomes a failed run whose diagnostic names the error
-   category.
-2. A completion that is not a JSON object, or names no field the tool accepts,
-   becomes a failed run rather than a tool call with empty arguments.
-3. With no LLM configured the behaviour is unchanged: the resolver is absent and
-   the run fails the way phase 7 shipped it.
+1. provider 错误会变成一次失败的运行，其诊断信息指明错误类别。
+2. 如果补全结果不是 JSON 对象，或者没有给出工具可接受的任何字段，则变成一次
+   失败的运行，而不是以空参数调用工具。
+3. 在未配置 LLM 时行为不变：解析器不存在，运行按第 7 阶段交付的方式失败。
 
-### US3 - Keep the tool as the authority on its input
+### US3 - 保持工具是其输入的唯一权威
 
-As a reviewer, I need the model's output to remain untrusted input, so a
-synthesized argument cannot widen what a tool accepts.
+作为评审者，我需要模型的输出始终被视为不可信输入，这样合成出的参数无法扩大工具
+所接受的范围。
 
-Acceptance scenarios:
+验收场景：
 
-1. The resolver returns the model's object unchanged; the tool's own pydantic
-   model still validates it, and a violating argument fails exactly as a
-   hand-written one would.
-2. The schema in the prompt is derived from that same model, so the prompt
-   cannot advertise a field the tool would refuse.
+1. 解析器原样返回模型给出的对象；工具自身的 pydantic 模型仍会校验它，违规的参数
+   失败的情形与手写参数完全一致。
+2. 提示词中的 schema 由同一个模型派生，因此提示词无法宣称某个工具会拒绝的字段。
 
-## Non-Goals
+## 非目标
 
-- No multi-turn argument refinement, no retry on validation failure (the run
-  stops and the trace says why).
-- No schema for control actions: `ask_user`, `delegate_to_llm` and `finish` never
-  reach the resolver, because the Policy Engine branches them before execution.
-- No change to how `write_file`'s path sandbox or `calculator`'s AST whitelist
-  validate.
+- 不做多轮参数细化，不在校验失败时重试（运行会停止，trace 会说明原因）。
+- 不为控制动作提供 schema：`ask_user`、`delegate_to_llm` 和 `finish` 永远不会
+  到达解析器，因为策略引擎会在执行之前对它们分支处理。
+- 不改变 `write_file` 的路径沙箱或 `calculator` 的 AST 白名单的校验方式。
 
-## Dependencies
+## 依赖
 
-- Phase 11: `jev_router/clients/llm.py`, the settings pair and the delegate
-  wiring this phase reuses.
-- Phase 2: the `Tool` protocol and the five tools whose input models become
-  visible.
+- 第 11 阶段：本阶段复用的 `jev_router/clients/llm.py`、配置项组合与委托接线。
+- 第 2 阶段：`Tool` 协议，以及其输入模型将变得可见的那五个工具。

@@ -1,24 +1,24 @@
-# Tasks: Jev Verifier
+# 任务：Jev 验证器
 
-## Phase 1: Verifier Contract
+## 阶段 1：验证器契约
 
-- [x] T001 Define the completion/quality question contract and immutable `VerificationDecision` in `jev_router/verifier.py`.
-- [x] T002 Build the JSON-compatible decision state from `TaskState` snapshots.
-- [x] T003 Reject state without a completed step or latest result before any provider I/O.
-- [x] T004 Implement one-request async verification and typed answer mapping.
-- [x] T005 Export the public verifier types from the package.
+- [x] T001 在 `jev_router/verifier.py` 中定义完成度/质量问题契约与不可变的 `VerificationDecision`。
+- [x] T002 从 `TaskState` 快照构建 JSON 兼容的决策状态。
+- [x] T003 在任何提供商 I/O 之前，拒绝没有已完成步骤或没有最新结果的状态。
+- [x] T004 实现单次请求的异步验证与类型化答案映射。
+- [x] T005 从包中导出公开的验证器类型。
 
-## Phase 2: Tests and Documentation
+## 阶段 2：测试与文档
 
-- [x] T006 Test request shape, decision state, typed mapping, invalid state, client failures, and no state mutation in `tests/test_verifier.py`.
-- [x] T007 Document scope, data model, and phase boundaries in this spec directory.
-- [x] T008 Update architecture and development documentation for the verifier's assessment-only role.
-- [x] T009 Run Ruff, strict mypy, and full offline pytest; review the authority boundary.
+- [x] T006 在 `tests/test_verifier.py` 中测试请求结构、决策状态、类型化映射、非法状态、客户端失败以及无状态修改。
+- [x] T007 在本规格目录中记录范围、数据模型与阶段边界。
+- [x] T008 更新架构与开发文档，说明验证器仅作评估的职责。
+- [x] T009 运行 Ruff、严格模式 mypy 以及完整的离线 pytest；审查权责边界。
 
-## Dependencies
+## 依赖
 
-T001 precedes T004–T006. T002–T003 precede T004. T006–T009 follow implementation and tests.
+T001 先于 T004–T006。T002–T003 先于 T004。T006–T009 在实现与测试之后进行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. The Verifier reports an assessment only; it does not mutate state, execute tools, or decide stop/continue policy.
+所有任务仅在实现与验证完成之后才会被勾选。验证器只报告评估；它不修改状态、不执行工具，也不决定停止/继续策略。

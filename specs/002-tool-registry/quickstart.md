@@ -1,6 +1,6 @@
-# Quickstart: Tool Registry
+# 快速开始：工具注册表
 
-## Construct tools
+## 构造工具
 
 ```python
 from pathlib import Path
@@ -24,18 +24,18 @@ registry = ToolRegistry([
 ])
 ```
 
-The application constructs the allowlist. Do not derive registrations or permissions from model output.
+允许列表由应用构造。不要从模型输出推导注册项或权限。
 
-## Execute and validate offline
+## 离线执行与校验
 
 ```python
 answer = registry.execute("calculator", {"expression": "(2 + 3) * 4"})
 assert answer.output["result"] == 20.0
 ```
 
-All tools expose synchronous `execute(input)` and return a `ToolResult`. Search requires injected local data/fixtures. `write_file` is constrained to its configured root and refuses existing files unless `allow_overwrite=True` is explicitly configured. `send_mock_email` only returns a local simulation.
+所有工具都提供同步的 `execute(input)` 并返回 `ToolResult`。搜索需要注入的本地数据／夹具。`write_file` 被限制在其配置的根目录内，并且除非显式配置 `allow_overwrite=True`，否则会拒绝覆盖已存在的文件。`send_mock_email` 只返回一次本地模拟。
 
-Run the checks from the repository root:
+在仓库根目录运行检查：
 
 ```sh
 uv run ruff check .
@@ -43,4 +43,4 @@ uv run mypy jev_router
 uv run pytest
 ```
 
-No live credentials or network connection are needed.
+不需要真实凭据或网络连接。

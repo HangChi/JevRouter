@@ -1,4 +1,4 @@
-# Quickstart: API HTTP Boundary
+# 快速开始：API HTTP 边界
 
 ```sh
 export JEV_API_KEY="your-key"
@@ -9,7 +9,7 @@ export JEV_WORKSPACE_ROOT="./workspace"
 uv run uvicorn apps.api.app:create_app --factory --reload
 ```
 
-Interactive docs are served at `http://127.0.0.1:8000/docs`.
+交互式文档在 `http://127.0.0.1:8000/docs` 提供。
 
 ```sh
 # Start a run; the response is immediate, the run continues in the background.
@@ -24,7 +24,7 @@ curl -s localhost:8000/tasks/$TASK | jq
 curl -s localhost:8000/tasks/$TASK/traces | jq
 ```
 
-A `write` or `external` risk action pauses the run:
+一个 `write` 或 `external` 风险的动作会让运行暂停：
 
 ```sh
 curl -s localhost:8000/tasks/$TASK | jq '.status, .pending_confirmation'
@@ -35,6 +35,6 @@ curl -s -X POST localhost:8000/tasks/$TASK/confirm \
   -H 'content-type: application/json' -d '{"approved": true}'
 ```
 
-The credential is read from the environment by the server process only. It is never part of a request, a response, or a stored trace.
+凭据仅由服务进程从环境中读取。它永远不会成为某个请求、某个响应或某条已存储 trace 的一部分。
 
-Run offline checks with `uv run pytest tests/test_api.py` and the full project checks.
+用 `uv run pytest tests/test_api.py` 运行离线检查，并运行完整的项目检查。

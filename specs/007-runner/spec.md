@@ -1,75 +1,75 @@
-# Feature Specification: Bounded Runner
+# 功能规格：有界执行循环（Runner）
 
-**Feature Branch**: `007-runner`
-**Status**: Complete
+**功能分支**：`007-runner`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Assemble the Router, Policy Engine, TaskState/budget, and Verifier into one bounded `route → policy → execute → verify` loop. The Runner owns budget consumption and termination, and collapses every failure mode into a diagnosable terminal status instead of letting exceptions escape.
+将路由层（Router）、策略引擎、TaskState/预算与验证器组装成一个有界的 `route → policy → execute → verify` 循环。执行循环（Runner）负责预算消耗与终止，并把每一种失败模式收敛为可诊断的终态，而不是让异常逃逸。
 
-## User Stories
+## 用户故事
 
-### US1 - Run a goal to completion
+### US1 - 将一个目标运行至完成
 
-As an application developer, I need a single call that drives a task from a goal to a verified result so the API layer does not have to re-implement orchestration.
+作为应用开发者，我需要一次调用即可把任务从目标驱动到经过验证的结果，这样 API 层就不必重新实现编排。
 
-Acceptance scenarios:
-1. A goal whose first route recommends a registered tool completes when the verifier's completion probability reaches the configured threshold.
-2. A completion probability below the threshold routes again against the advanced state.
-3. A `finish` recommendation with no completed step stops as complete without issuing a verification request.
-4. A `finish` recommendation after at least one step is confirmed by the verifier before stopping.
+验收场景：
+1. 当首次路由推荐了已注册工具的目标，在验证器的完成概率达到配置阈值时完成。
+2. 完成概率低于阈值时，会针对推进后的状态再次路由。
+3. 在没有任何已完成步骤时给出 `finish` 推荐，会以完成状态停止，且不发起验证请求。
+4. 在至少完成一步之后给出的 `finish` 推荐，会先由验证器确认再停止。
 
-### US2 - Never exceed the execution budget
+### US2 - 绝不超出执行预算
 
-As an application developer, I need the loop to stop safely when steps or model calls run out so a misrouting provider cannot spin forever.
+作为应用开发者，我需要循环在步数或模型调用耗尽时安全停止，这样误路由的提供商就无法无限空转。
 
-Acceptance scenarios:
-1. Exhausted step or model-call budget stops the run with `budget_exhausted` before another provider request.
-2. Each loop iteration consumes exactly one step; each route, verification and delegation consumes one model call.
-3. A budget whose model-call allowance cannot cover one route plus one verify per step is rejected at construction.
+验收场景：
+1. 步数或模型调用预算耗尽时，会在下一次提供商请求之前以 `budget_exhausted` 停止运行。
+2. 每次循环迭代恰好消耗一步；每次路由、验证与委托消耗一次模型调用。
+3. 若预算的模型调用额度无法覆盖每步的一次路由加一次验证，则在构造时被拒绝。
 
-### US3 - Obtain explicit approval before side effects
+### US3 - 在副作用之前取得明确批准
 
-As an application developer, I need external and workspace-writing tools gated by an explicit approval even when the provider's probabilities look safe.
+作为应用开发者，我需要外部工具与写入工作区的工具即使提供商的概率看起来安全，也必须经过显式批准。
 
-Acceptance scenarios:
-1. A `write` or `external` risk tool requires confirmation regardless of the policy outcome.
-2. The confirmation handler receives the resolved arguments, not just the action name.
-3. Missing or denied confirmation stops the run with `needs_confirmation` and performs no side effect.
+验收场景：
+1. `write` 或 `external` 风险工具无论策略结果如何都需要确认。
+2. 确认处理器接收到的是解析后的参数，而不仅是动作名。
+3. 确认缺失或被拒绝时，会以 `needs_confirmation` 停止运行，且不产生任何副作用。
 
-### US4 - Diagnose every stop
+### US4 - 诊断每一次停止
 
-As an application developer, I need a typed trace for every step, including steps that stop before a decision, so failures are auditable.
+作为应用开发者，我需要每一步都有类型化的 trace，包括在做出决策之前就停止的步骤，这样失败才可审计。
 
-Acceptance scenarios:
-1. Each loop iteration emits one `StepTrace` with the routing payload, decision probabilities, policy result, execution result and duration.
-2. Paths that stop before a decision still emit a trace, so `RunResult.traces` is never empty for a started run.
-3. A trace sink that raises does not abort the run.
+验收场景：
+1. 每次循环迭代输出一个 `StepTrace`，包含路由载荷、决策概率、策略结果、执行结果与耗时。
+2. 在做出决策之前就停止的路径同样会输出 trace，因此对于已启动的运行，`RunResult.traces` 从不为空。
+3. 抛出异常的 trace sink 不会中止运行。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide an asynchronous `Runner` that assembles `Router`, `PolicyEngine` and `Verifier` from one injected `JevClient`, model identifier and `ToolRegistry`.
-- **FR-002**: Consume one step per iteration and one model call per route, verification and delegation, rejecting exhausted budget before further provider I/O.
-- **FR-003**: Return an immutable `RunResult` with a terminal `RunStatus`, final `TaskState`, remaining budget, traces and optional diagnostic.
-- **FR-004**: Leave completion thresholds, tool execution, confirmation, user input and delegation to injected collaborators; the Runner never blocks on a human.
-- **FR-005**: Require confirmation for `write` and `external` risk tools independently of the policy outcome, bound to the resolved arguments.
-- **FR-006**: Fail closed when a required handler is absent: `needs_confirmation`, `needs_user_input` or `failed` as appropriate.
-- **FR-007**: Convert provider errors, tool input errors and state rejection into `failed` with a diagnostic, never an escaping exception.
-- **FR-008**: Stop with `failed` when the verifier reports no progress on an unchanged state, instead of re-routing an identical payload until the budget runs out.
-- **FR-009**: Emit one immutable `StepTrace` per iteration and for pre-decision terminations.
-- **FR-010**: Not mutate task state in place, execute unregistered actions, or bypass the Policy Engine.
-- **FR-011**: Offline tests cover completion, continuation, finish, budget exhaustion, confirmation gating, delegation, user input, every failure mode, trace emission and immutability.
+- **FR-001**：提供异步的 `Runner`，由注入的单个 `JevClient`、模型标识符与 `ToolRegistry` 组装出 `Router`、`PolicyEngine` 与 `Verifier`。
+- **FR-002**：每次迭代消耗一步，每次路由、验证与委托消耗一次模型调用；在进一步提供商 I/O 之前拒绝已耗尽的预算。
+- **FR-003**：返回不可变的 `RunResult`，包含终态 `RunStatus`、最终 `TaskState`、剩余预算、trace 以及可选的诊断信息。
+- **FR-004**：把完成度阈值、工具执行、确认、用户输入与委托留给注入的协作者；执行循环（Runner）从不在人类身上阻塞等待。
+- **FR-005**：对 `write` 与 `external` 风险工具要求确认，独立于策略结果，并绑定到解析后的参数。
+- **FR-006**：当所需的处理器缺失时按失败关闭：视情况返回 `needs_confirmation`、`needs_user_input` 或 `failed`。
+- **FR-007**：把提供商错误、工具输入错误与状态拒绝转换为带诊断信息的 `failed`，绝不让异常逃逸。
+- **FR-008**：当验证器报告在未变化的状态上没有进展时，以 `failed` 停止，而不是反复路由相同的载荷直到预算耗尽。
+- **FR-009**：每次迭代输出一个不可变的 `StepTrace`，决策前终止时也输出一个。
+- **FR-010**：不原地修改任务状态、不执行未注册的动作、不绕过策略引擎。
+- **FR-011**：离线测试覆盖完成、继续、结束、预算耗尽、确认门控、委托、用户输入、每一种失败模式、trace 输出以及不可变性。
 
-## Success Criteria
+## 成功标准
 
-- A verified run consumes exactly one step and two model calls per executing iteration.
-- No side effect occurs without confirmation for `write`/`external` tools.
-- No exception escapes `Runner.run`; every stop carries a status and a diagnostic.
-- Ruff, strict mypy, and the full offline test suite pass.
+- 一次经过验证的运行，每个执行迭代恰好消耗一步与两次模型调用。
+- 对于 `write`/`external` 工具，未经确认不会产生任何副作用。
+- 没有异常逃出 `Runner.run`；每次停止都带有状态与诊断信息。
+- Ruff、严格模式 mypy 以及完整离线测试套件通过。
 
-## Non-Goals
+## 非目标
 
-- LLM adapter implementation (`clients/llm.py`), model discovery, retries or client contract changes.
-- Trace persistence, task storage, API or dashboard.
-- Task identity or status fields on `TaskState`.
-- Threshold calibration, monetary budgets or dynamic budget refill.
+- LLM 适配器实现（`clients/llm.py`）、模型发现、重试或客户端契约变更。
+- trace 持久化、任务存储、API 或仪表盘。
+- `TaskState` 上的任务身份或状态字段。
+- 阈值校准、货币预算或动态预算补充。

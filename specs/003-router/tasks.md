@@ -1,22 +1,22 @@
-# Tasks: Decision Router
+# 任务：决策路由层
 
-## Phase 1: Router Contract
+## 阶段 1：路由层契约
 
-- [x] T001 Define the action and risk question contract and immutable decision result in `jev_router/router.py`.
-- [x] T002 Implement one-request async routing over trusted registered tools and fixed control actions.
-- [x] T003 Export `Router` and `RouteDecision` from the package.
+- [x] T001 在 `jev_router/router.py` 中定义动作与风险问题契约，以及不可变的决策结果。
+- [x] T002 基于可信的已注册工具和固定控制动作，实现单次请求的异步路由。
+- [x] T003 从包中导出 `Router` 和 `RouteDecision`。
 
-## Phase 2: Tests and Documentation
+## 阶段 2：测试与文档
 
-- [x] T004 Test request shape, risk legend, result mapping, empty registry, typed errors, and no execution in `tests/test_router.py`.
-- [x] T005 Document scope, data model, offline use, and phase boundaries in this spec directory.
-- [x] T006 Update architecture and development documentation for Router's recommendation-only role.
-- [x] T007 Run Ruff, strict mypy, and full offline pytest; review the authority boundary.
+- [x] T004 在 `tests/test_router.py` 中测试请求形态、风险图例、结果映射、空注册表、类型化错误以及不发生执行。
+- [x] T005 在本规格目录中记录范围、数据模型、离线用法和阶段边界。
+- [x] T006 更新架构与开发文档，说明路由层仅提供建议的职责。
+- [x] T007 运行 Ruff、严格模式的 mypy 和完整离线 pytest；复核权威边界。
 
-## Dependencies
+## 依赖关系
 
-T001 precedes T002–T004. T006–T007 follow implementation and tests.
+T001 先于 T002–T004。T006–T007 在实现与测试之后执行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. The Router does not authorize or execute tool actions.
+所有任务仅在其实现与验证完成之后才会被勾选。路由层不授权也不执行工具动作。

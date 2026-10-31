@@ -1,35 +1,35 @@
-# Tasks: Comparison Dashboard
+# 任务：对比看板
 
-## Phase 1: Persistence and HTTP boundary
+## 阶段 1：持久化与 HTTP 边界
 
-- [x] T001 Extend `apps/api/storage.py` with `eval_runs` and `eval_case_results`, bump `SCHEMA_VERSION` to 2, and implement `record_eval_run`, `list_eval_runs` and `load_eval_run` using the existing envelope encode/decode and upsert idempotence; cover round-trip, re-recording the same id, and a version-1 database still opening.
-- [x] T002 Add the strict payload and view models to `apps/api/schemas.py` for recording and reading an eval run.
-- [x] T003 Add `POST /evals`, `GET /evals` and `GET /evals/{run_id}` to `apps/api/app.py` with the existing error mapping (`404` unknown run, `422` invalid body, `400` bad limit), and cover them in `tests/test_api.py`.
+- [x] T001 为 `apps/api/storage.py` 增加 `eval_runs` 与 `eval_case_results`，把 `SCHEMA_VERSION` 升到 2，并用既有的外层结构编解码与 upsert 幂等性实现 `record_eval_run`、`list_eval_runs` 与 `load_eval_run`；覆盖往返读写、重复记录同一 id，以及 version-1 数据库仍可打开。
+- [x] T002 在 `apps/api/schemas.py` 中为记录与读取一次评测运行添加严格的 payload 模型与视图模型。
+- [x] T003 为 `apps/api/app.py` 添加 `POST /evals`、`GET /evals` 与 `GET /evals/{run_id}`，沿用既有的错误映射（`404` 未知运行、`422` 非法请求体、`400` 错误的 limit），并在 `tests/test_api.py` 中覆盖它们。
 
-## Phase 2: CLI bridge
+## 阶段 2：命令行桥接
 
-- [x] T004 Add `--api URL` to `evals/cli.py`: after a run finishes, post the report to `POST /evals` using the API's own payload models, reporting a non-2xx answer as a failure with the API's message.
+- [x] T004 为 `evals/cli.py` 添加 `--api URL`：在一次运行结束后，使用 API 自己的 payload 模型把报告 POST 到 `POST /evals`，将非 2xx 响应作为失败上报并附上 API 的消息。
 
-## Phase 3: Web dashboard
+## 阶段 3：Web 看板
 
-- [x] T005 Mirror the eval transport types in `apps/web/src/lib/types.ts`.
-- [x] T006 Add `listEvalRuns` and `getEvalRun` to `apps/web/src/lib/api.ts` and cover them with a stubbed fetch.
-- [x] T007 Add the eval view model to `apps/web/src/lib/viewModel.ts`: aggregate cards per mode, agreement tone, per-case comparison rows, and formatting for rates, durations and token counts; unit-test it including absent metrics and one-sided runs.
-- [x] T008 Build `apps/web/src/app/evals/page.tsx`: the run list with one card set per run, the API-unavailable notice and the empty state.
-- [x] T009 Build `apps/web/src/app/evals/[runId]/page.tsx`: the per-case comparison table with expected action, both modes' actions, agreement, latencies, tokens and errors, plus the not-found page for an unknown run.
-- [x] T010 Add the evals link to the dashboard header.
+- [x] T005 在 `apps/web/src/lib/types.ts` 中镜像评测传输类型。
+- [x] T006 为 `apps/web/src/lib/api.ts` 添加 `listEvalRuns` 与 `getEvalRun`，并用桩化的 fetch 覆盖它们。
+- [x] T007 为 `apps/web/src/lib/viewModel.ts` 添加评测视图模型：按模式的聚合卡片、一致性色调、逐用例对比行，以及比率、时长与 Token 计数的格式化；对其做单元测试，包含缺失指标与单侧运行的情形。
+- [x] T008 构建 `apps/web/src/app/evals/page.tsx`：运行列表，每次运行一组卡片，以及 API 不可用提示与空状态。
+- [x] T009 构建 `apps/web/src/app/evals/[runId]/page.tsx`：逐用例对比表，含期望动作、两种模式的动作、是否一致、延迟、Token 与错误，以及未知运行的未找到页面。
+- [x] T010 在看板头部添加评测链接。
 
-## Phase 4: Checks, verification and documentation
+## 阶段 4：检查、验证与文档
 
-- [x] T011 Run `tsc --noEmit`, vitest, eslint and `next build` in `apps/web`; fix everything they report.
-- [x] T012 Verify end to end: boot `apps.api` under uvicorn with a temporary database, record a seeded compare run through `POST /evals` driven by curl, read it back through `GET /evals/{run_id}`, and render both dashboard pages against that API with curl.
-- [x] T013 Update `README.md`, `docs/development.md`, `docs/architecture.md` and `apps/web/README.md` for the eval endpoints and pages; record the new schema version.
-- [x] T014 Write this spec directory's `data-model.md` and `quickstart.md`, then run the full project checks (ruff, strict mypy over `jev_router apps evals`, pytest).
+- [x] T011 在 `apps/web` 中运行 `tsc --noEmit`、vitest、eslint 与 `next build`；修复它们报告的所有问题。
+- [x] T012 端到端验证：用临时数据库在 uvicorn 下启动 `apps.api`，通过 curl 驱动 `POST /evals` 记录一次预置好的 compare 运行，再通过 `GET /evals/{run_id}` 读回，并用 curl 针对该 API 渲染两个看板页面。
+- [x] T013 更新 `README.md`、`docs/development.md`、`docs/architecture.md` 与 `apps/web/README.md`，以覆盖评测端点与页面；记录新的 schema 版本。
+- [x] T014 编写本规格目录下的 `data-model.md` 与 `quickstart.md`，然后运行完整的项目检查（ruff、对 `jev_router apps evals` 的严格 mypy、pytest）。
 
-## Dependencies
+## 依赖关系
 
-T001 precedes T002/T003. T003 precedes T004. T005–T007 precede T008/T009. T010 is independent. T011–T014 follow implementation.
+T001 先于 T002/T003。T003 先于 T004。T005–T007 先于 T008/T009。T010 独立。T011–T014 在实施之后进行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. No metric definition changes in this phase, and `evals/` still imports nothing from `apps/` except the CLI's payload models for the `--api` bridge.
+所有任务只有在实施与验证之后才会被勾选。本阶段不改动任何指标定义，且 `evals/` 除命令行用于 `--api` 桥接的 payload 模型之外，仍然不从 `apps/` 导入任何内容。

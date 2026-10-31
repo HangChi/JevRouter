@@ -1,36 +1,36 @@
-# Tasks: Trace Persistence
+# 任务：trace 持久化
 
-## Phase 1: Storage Contract
+## 阶段 1：存储契约
 
-- [x] T001 Create the `apps/api` package and define `SCHEMA_VERSION`/`PAYLOAD_VERSION`.
-- [x] T002 Define the `tasks`, `agent_steps` and `evaluations` schema with cascading keys and indexes.
-- [x] T003 Implement versioned payload encode/decode with `_degrade` fallback.
-- [x] T004 Record the schema version and refuse a database newer than this build.
+- [x] T001 创建 `apps/api` 包，并定义 `SCHEMA_VERSION`/`PAYLOAD_VERSION`。
+- [x] T002 定义 `tasks`、`agent_steps` 与 `evaluations` 的模式，含级联键与索引。
+- [x] T003 实现带版本载荷的编码/解码，并带 `_degrade` 回退。
+- [x] T004 记录模式版本，并拒绝比本次构建更新的数据库。
 
-## Phase 2: Reads and Writes
+## 阶段 2：读取与写入
 
-- [x] T005 Implement `record(RunResult)` as one idempotent transaction.
-- [x] T006 Implement `sink()` writing each step under a `running` task marker.
-- [x] T007 Implement `load_traces` reconstructing `StepTrace` values via a steps/evaluations join.
-- [x] T008 Implement `load_task` and `list_tasks` returning `TaskRecord`.
-- [x] T009 Apply the optional redaction callback before encoding.
-- [x] T010 Provide connection lifecycle: `close()` and the context manager.
+- [x] T005 把 `record(RunResult)` 实现为单个幂等事务。
+- [x] T006 实现 `sink()`，在 `running` 任务标记之下写入每个步骤。
+- [x] T007 实现 `load_traces`，通过 steps/evaluations 连接重建 `StepTrace` 值。
+- [x] T008 实现 `load_task` 与 `list_tasks`，返回 `TaskRecord`。
+- [x] T009 在编码之前应用可选的脱敏回调。
+- [x] T010 提供连接生命周期：`close()` 与上下文管理器。
 
-## Phase 3: Tests and Documentation
+## 阶段 3：测试与文档
 
-- [x] T011 Test round-trip equality, task fields and evaluation separation in `tests/test_storage.py`.
-- [x] T012 Test incremental sink writes, finalization and idempotency.
-- [x] T013 Test payload and schema version refusal, and malformed payloads.
-- [x] T014 Test redaction coverage, degradation of unserializable values, and task isolation.
-- [x] T015 Test that a run driven with a sentinel credential stores none of it.
-- [x] T016 Document scope, data model and phase boundaries in this spec directory.
-- [x] T017 Update architecture and development documentation for the storage layer.
-- [x] T018 Extend static checks to `apps`, and run Ruff, strict mypy and full offline pytest.
+- [x] T011 在 `tests/test_storage.py` 中测试往返相等性、任务字段与评测分离。
+- [x] T012 测试增量 sink 写入、定稿与幂等性。
+- [x] T013 测试载荷与模式版本的拒绝，以及格式错误的载荷。
+- [x] T014 测试脱敏的覆盖范围、不可序列化值的降级以及任务隔离。
+- [x] T015 测试用哨兵凭据驱动的运行不会存储其中任何部分。
+- [x] T016 在本规格目录中记录范围、数据模型与阶段边界。
+- [x] T017 为存储层更新架构与开发文档。
+- [x] T018 把静态检查扩展到 `apps`，并运行 Ruff、严格 mypy 与完整的离线 pytest。
 
-## Dependencies
+## 依赖关系
 
-T001–T004 precede T005–T010. T011–T018 follow implementation and tests.
+T001–T004 先于 T005–T010。T011–T018 在实现与测试之后进行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. Storage only consumes the immutable records the Runner already produces; it adds no behaviour to the core loop and holds no database code inside `jev_router`.
+所有任务只有在实现与验证之后才会被勾选。存储只消费 Runner 已经产出的不可变记录；它不为核心循环增加行为，也不在 `jev_router` 内持有任何数据库代码。

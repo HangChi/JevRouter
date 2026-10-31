@@ -38,6 +38,15 @@ cd apps/web && npm run dev
   上下文分别填 `[1, 2]` 和 `5`，各提交一次。
   预期：红字 `context must be a JSON object`，均不跳转、不发请求。
 
+- [ ] **A6 · 策略页可读**
+  打开 `/policy`。
+  预期：显示四组阈值与完成度阈值的当前值，下面一张表列出默认注册表的三个工具（`calculator` 读、`write_file` 写入、`send_mock_email` 外部副作用），其中后两者的「必须确认」为「是」。页面底部给出 `--mode calibrate` 的提示。
+
+- [ ] **A7 · 策略页与 API 一致**
+  用 `JEV_CONFIRMATION_THRESHOLD=0.6` 重启 API，刷新 `/policy`。
+  预期：确认概率阈值显示 0.60。如果还显示 0.75，说明页面读的是前端的写死副本而不是 `GET /policy`。
+
+
 ## B. 单步完成（calculator，最便宜的真实 run）
 
 - [ ] **B1 · 无确认的执行**
@@ -79,6 +88,32 @@ cd apps/web && npm run dev
 
   预期：`send_mock_email` 是 external 风险，即使概率低也强制确认；批准后结果是 mock，不会真的发信。
 
+- [ ] **C5 · 确认带参数摘要与有效期**
+  重复 C1，停在等待确认时看黄色区块。
+  预期：参数下方有一行「这次批准只对上面这份参数有效，有效期至 …」，时间约为当前时刻加 15 分钟。
+  再用 `curl` 拿一次任务详情，检查 `pending_confirmation` 里有 `digest` 与 `expires_at`：
+
+  ```sh
+  curl -s http://127.0.0.1:8000/tasks/<task_id> | python3 -m json.tool
+  ```
+
+- [ ] **C6 · 摘要不符会被拒绝**
+  在 C5 的基础上，用一个假摘要调确认接口：
+
+  ```sh
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+    -H 'content-type: application/json' \
+    -d '{"approved": true, "digest": "not-the-digest"}' \
+    http://127.0.0.1:8000/tasks/<task_id>/confirm
+  ```
+
+  预期：`409`，任务仍停在等待确认。随后用页面上的正确摘要批准，run 继续。
+
+- [ ] **C7 · 过期按未批准处理**
+  用 `JEV_CONFIRMATION_TTL_SECONDS=5` 重启 API，提交 C1 的目标，停在等待确认后**等 10 秒以上再点批准**。
+  预期：状态变为「需要确认」并带诊断，文件没有落盘。悬着的确认不会在几小时后突然生效。
+
+
 ## D. LLM 委托（最慢，单步 7–30 秒）
 
 - [ ] **D1 · 委托分支**
@@ -109,6 +144,18 @@ cd apps/web && npm run dev
   ```
 
   预期：默认注册表只有 `calculator`、`write_file`、`send_mock_email`，没有 `web_search`（它需要调用方注入文档）→ 策略「拒绝」→ 重试到预算耗尽，终态为「预算耗尽」或「已拒绝」并留下诊断。这条会烧满 8 步 × 2 次模型调用，所以放最后。
+
+- [ ] **F2 · 设了 token 就要求凭证**
+  用 `JEV_API_TOKEN=local-check` 重启 API（仪表盘也要带上同样的 token，否则页面会显示「无法读取运行列表」——这正是预期）。
+
+  ```sh
+  curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8000/tasks
+  curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer wrong' http://127.0.0.1:8000/tasks
+  curl -s -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer local-check' http://127.0.0.1:8000/tasks
+  ```
+
+  预期：依次 `401`、`401`、`200`。不设该变量时 API 不鉴权，启动日志里应有一条 warning。
+
 
 ## 收尾
 

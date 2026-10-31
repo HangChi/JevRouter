@@ -1,88 +1,88 @@
-# Feature Specification: Eval Runner and LLM Baseline
+# 功能规格说明：评测执行循环（Runner）与 LLM 基线
 
-**Feature Branch**: `011-eval-runner`
-**Status**: Complete
+**功能分支**：`011-eval-runner`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Turn the MVP thresholds from guesses into measurements. A fixed, versioned set of routing cases is replayed against the Jev router and against an LLM baseline router, and the run produces routing agreement, expected/allowed match, escalation, confirmation and latency/token metrics. This phase adds no agent behaviour to the run path: the Runner, Policy Engine and tools are used exactly as they are, and the only core additions are the provider adapters the comparison needs.
+把 MVP 的各项阈值从猜测变成测量结果。用一套固定、版本化的路由用例集，分别回放给 Jev Router（路由层）和作为基线的 LLM 路由层，一次运行即可产出路由一致率、期望/允许动作匹配情况、升级、确认以及延迟/Token 指标。本阶段不给运行路径增加任何 agent 行为：执行循环（Runner）、策略引擎和工具都按原样使用，核心新增部分只有本次对比所需的 provider 适配器。
 
-## Background
+## 背景
 
-`doc.md` orders the work so that the eval runner and the comparison dashboard come last, after the agent loop, trace persistence, HTTP boundary and web dashboard exist. `docs/development.md` already records the intent: "Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。" The thresholds in `jev_router/policy.py` are documented as initial project values that should be calibrated against evals; until this phase there is nothing to calibrate them against.
+`doc.md` 规定的工作顺序是：评测执行循环和对比看板排在最后，位于 agent 循环、trace 持久化、HTTP 边界和 Web 看板之后。`docs/development.md` 已经记录了该意图："Eval：使用固定、版本化用例记录正确动作、允许动作集合和必要确认；分别统计路由一致率、任务完成率、升级率及延迟。" `jev_router/policy.py` 中的阈值被标注为项目初始值，应当依据评测结果进行校准；而在本阶段之前，没有任何可供校准的评测数据。
 
-## Scope
+## 范围
 
-In scope:
+范围内：
 
-- `jev_router/clients/llm.py`: an httpx-based LLM adapter (Anthropic Messages API shape) with its own config and error taxonomy, mirroring how `clients/jev.py` isolates the Jev provider.
-- `evals/`: a versioned case file, a case loader with validation, a deterministic tool registry, the LLM baseline router, the runner, the metrics aggregation and a CLI.
-- Additive token-usage fields on `RouteDecision`, because the comparison table cannot show input/output tokens otherwise.
-- Optional, settings-gated LLM delegation in `apps/api`, so `delegate_to_llm` stops being unconditionally fail-closed when an LLM is configured. Without LLM configuration the behaviour is exactly what phase 7 shipped.
+- `jev_router/clients/llm.py`：一个基于 httpx 的 LLM 适配器（采用 Anthropic Messages API 的形态），自带配置与错误分类，其隔离方式与 `clients/jev.py` 隔离 Jev provider 的方式一致。
+- `evals/`：版本化用例文件、带校验的用例加载器、确定性的工具注册表、LLM 基线路由层、执行循环（Runner）、指标聚合以及命令行工具。
+- 在 `RouteDecision` 上以增量方式新增 Token 用量字段，否则对比表无法展示输入/输出 Token。
+- 在 `apps/api` 中加入由配置开关控制的可选 LLM 委托，使得在配置了 LLM 之后 `delegate_to_llm` 不再无条件地失败关闭。在没有 LLM 配置时，行为与第 7 阶段交付的完全一致。
 
-Out of scope (phase 12):
+范围外（第 12 阶段）：
 
-- Persisting eval runs, the `POST/GET /evals` endpoints and the dashboard pages that render the comparison.
-- Any change to the thresholds themselves. This phase measures; it does not calibrate.
+- 持久化评测运行结果、`POST/GET /evals` 端点以及渲染对比结果的看板页面。
+- 任何对阈值本身的改动。本阶段只做测量，不做校准。
 
-## User Stories
+## 用户故事
 
-### US1 - Replay a fixed case set offline
+### US1 - 离线回放固定用例集
 
-As the project owner, I need the case set to be a versioned file with the correct action, the acceptable action set and whether confirmation is necessary, so a run is reproducible and a case change is visible in review.
+作为项目负责人，我需要用例集是一个版本化文件，其中记录正确动作、可接受动作集合以及是否需要确认，这样一次运行就可复现，用例的改动也能在评审中被看见。
 
-Acceptance scenarios:
+验收场景：
 
-1. `evals/cases.json` carries a `version` envelope and at least 50 cases covering every registered tool and all three control actions.
-2. The loader refuses an unknown payload version, a duplicate case id, an empty case list, and a case whose expected action is outside its allowed set.
-3. Every case is valid against the loader when the suite runs, so the committed file cannot rot silently.
+1. `evals/cases.json` 带有 `version` 外层结构，且至少包含 50 个用例，覆盖每一个已注册工具以及全部三种控制动作。
+2. 加载器会拒绝未知的 payload 版本、重复的 case id、空用例列表，以及期望动作不在其允许集合内的用例。
+3. 套件运行时，每个用例都能通过加载器校验，因此已提交的文件不会在无人察觉的情况下腐坏。
 
-### US2 - Measure Jev routing against expectations
+### US2 - 对照预期测量 Jev 路由结果
 
-As the project owner, I need per-case outcomes for the Jev router — chosen action, policy outcome, latency and token usage — so I can see where the router and the policy disagree with the case's expectation.
+作为项目负责人，我需要 Jev Router（路由层）在每个用例上的结果——所选动作、策略判定结果、延迟和 Token 用量——以便看清路由层和策略在哪些地方与用例预期不一致。
 
-Acceptance scenarios:
+验收场景：
 
-1. Each case produces exactly one outcome per mode, with `matched_expected`, `matched_allowed`, `escalated`, `confirmation_requested` and `succeeded`.
-2. A provider failure becomes an outcome carrying the error, not an exception that aborts the run.
-3. `succeeded` requires the action to be acceptable **and** the policy's confirmation decision to match the case's `requires_confirmation`.
+1. 每个用例在每种模式下恰好产生一个结果，包含 `matched_expected`、`matched_allowed`、`escalated`、`confirmation_requested` 和 `succeeded`。
+2. provider 失败会变成一个携带错误信息的结果，而不是一个中止整个运行的异常。
+3. `succeeded` 要求动作可接受**并且**策略的确认判定与该用例的 `requires_confirmation` 相符。
 
-### US3 - Compare against an LLM baseline
+### US3 - 与 LLM 基线做对比
 
-As the project owner, I need the same cases routed by an LLM that sees the same goal, history and candidate actions, so the comparison is like-for-like.
+作为项目负责人，我需要让一个 LLM 来路由同一批用例，它看到相同的目标、历史和候选动作，从而使对比是同口径的。
 
-Acceptance scenarios:
+验收场景：
 
-1. The baseline asks for a strict JSON object naming one candidate action; anything unparseable or outside the candidate set is an error outcome, not a silent default.
-2. Each baseline outcome records latency and input/output tokens.
-3. `compare` mode runs both routers per case and records agreement per case.
+1. 基线要求返回一个严格 JSON 对象，指明某一个候选动作；任何无法解析或不在候选集合内的结果都是错误结果，而不是静默取默认值。
+2. 每个基线结果都记录延迟以及输入/输出 Token 数。
+3. `compare` 模式对每个用例同时运行两个路由层，并记录该用例上的一致性。
 
-### US4 - Aggregate into stable metrics
+### US4 - 聚合为稳定的指标
 
-As the project owner, I need aggregate metrics — match rates, escalation and confirmation rates, latency statistics and token statistics, plus the Jev/LLM agreement rate — so a threshold change can be judged by numbers instead of anecdotes.
+作为项目负责人，我需要聚合指标——匹配率、升级率与确认率、延迟统计与 Token 统计，以及 Jev/LLM 一致率——这样阈值调整就可以依据数字而非个例传闻来评判。
 
-Acceptance scenarios:
+验收场景：
 
-1. Metrics are computed by pure functions over the per-case outcomes, with no I/O.
-2. Latency reports mean, p50, p95 and max in milliseconds; tokens report mean and total.
-3. An empty outcome set yields zeroed metrics rather than a division by zero.
+1. 指标由纯函数基于逐用例结果计算得出，不涉及任何 I/O。
+2. 延迟以毫秒报告均值、p50、p95 和最大值；Token 报告均值和总量。
+3. 空结果集会得到全零指标，而不是除零错误。
 
-### US5 - Run it from the command line
+### US5 - 从命令行运行
 
-As the project owner, I need a CLI that runs a mode against the real providers with explicit credentials, prints a summary and optionally writes a versioned JSON report, so an eval run is a deliberate, auditable act and not something a test does by accident.
+作为项目负责人，我需要一个命令行工具，用显式凭据对真实 provider 运行指定模式，打印摘要并可选地写出一个版本化 JSON 报告，这样一次评测运行就是一次有意识的、可审计的行为，而不是测试偶然触发的事情。
 
-Acceptance scenarios:
+验收场景：
 
-1. `python -m evals --mode jev|llm|compare` runs the selected routers; missing credentials fail before any case runs.
-2. `--json-out PATH` writes the report; the summary prints to stdout either way.
-3. The exit code is non-zero when any case errored, so a broken provider run cannot look like a clean one.
+1. `python -m evals --mode jev|llm|compare` 会运行所选的路由层；凭据缺失时会在任何用例运行之前失败。
+2. `--json-out PATH` 写出报告；无论如何，摘要都会打印到 stdout。
+3. 只要有任何用例出错，退出码就非零，这样一次坏掉的 provider 运行不会看起来像一次干净的运行。
 
-## Non-Goals
+## 非目标
 
-- No automatic threshold tuning, no statistical significance testing, no multi-run variance.
-- No real web search or email: the eval registry uses the same offline tools the API uses, because the eval measures routing, not tool I/O.
-- No browser surface (phase 12), no database writes (phase 12).
+- 不做自动阈值调优，不做统计显著性检验，不做多次运行的方差分析。
+- 不接入真实网络搜索或邮件：评测注册表使用与 API 相同的离线工具，因为评测衡量的是路由，而非工具的 I/O。
+- 不做浏览器界面（第 12 阶段），不写数据库（第 12 阶段）。
 
-## Dependencies
+## 依赖
 
-- Phases 1–10: the client, tools, router, policy, state, verifier, runner, trace store, HTTP boundary and dashboard this phase measures and extends.
+- 第 1–10 阶段：本阶段所测量并扩展的客户端、工具、路由层、策略、状态、验证器、执行循环（Runner）、trace 存储、HTTP 边界与看板。

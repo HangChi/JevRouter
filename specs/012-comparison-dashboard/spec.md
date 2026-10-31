@@ -1,65 +1,65 @@
-# Feature Specification: Comparison Dashboard
+# 功能规格说明：对比看板
 
-**Feature Branch**: `012-comparison-dashboard`
-**Status**: Complete
+**功能分支**：`012-comparison-dashboard`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Close the loop `doc.md` describes in its final section: eval runs become durable records the HTTP boundary serves, and the dashboard renders the Jev-vs-LLM comparison — per-case decisions, latencies and token counts side by side, plus the aggregate agreement, match, escalation and success rates. This phase adds no routing behaviour; it persists and displays what phase 11's runner already produces.
+闭合 `doc.md` 最后一节所描述的循环：评测运行成为 HTTP 边界对外提供的持久记录，看板渲染 Jev 与 LLM 的对比——逐用例的决策、延迟与 Token 计数并排展示，再加上聚合的一致率、匹配率、升级率与成功率。本阶段不新增任何路由行为；它只持久化并展示第 11 阶段执行循环（Runner）已经产出的内容。
 
-## Scope
+## 范围
 
-In scope:
+范围内：
 
-- `apps/api/storage.py`: `eval_runs` and `eval_case_results` tables following the store's existing conventions (schema version, versioned JSON envelopes, upsert idempotence), with `record_eval_run`, `list_eval_runs` and `load_eval_run`.
-- `apps/api/schemas.py`: strict payload models for a recorded run plus read views.
-- `apps/api/app.py`: `POST /evals`, `GET /evals`, `GET /evals/{run_id}` with the existing error mapping.
-- `evals/cli.py`: an `--api` option that posts a finished report to the running API.
-- `apps/web`: the mirror types, client methods, view model functions and the two pages — a run list with aggregate cards, and a run detail with the per-case comparison table.
+- `apps/api/storage.py`：`eval_runs` 与 `eval_case_results` 两张表，遵循存储层已有的约定（schema 版本、版本化 JSON 外层结构、upsert 幂等性），并提供 `record_eval_run`、`list_eval_runs` 与 `load_eval_run`。
+- `apps/api/schemas.py`：用于已记录运行的严格 payload 模型，以及读取视图。
+- `apps/api/app.py`：`POST /evals`、`GET /evals`、`GET /evals/{run_id}`，沿用现有的错误映射。
+- `evals/cli.py`：一个 `--api` 选项，把已完成的报告提交到正在运行的 API。
+- `apps/web`：镜像类型、客户端方法、视图模型函数以及两个页面——带聚合卡片的运行列表页，和带逐用例对比表的运行详情页。
 
-Out of scope: changing any metric definition (phase 11 owns that), rerunning evals from the browser, and any write path other than recording a finished report.
+范围外：改动任何指标定义（该部分由第 11 阶段负责）、从浏览器重跑评测，以及除记录已完成报告之外的任何写入路径。
 
-## User Stories
+## 用户故事
 
-### US1 - Keep eval runs
+### US1 - 保留评测运行记录
 
-As the project owner, I need an eval run to survive the process that produced it, so a threshold decision can cite a specific run instead of a terminal scrollback.
+作为项目负责人，我需要一次评测运行能在产生它的进程结束后依然存在，这样阈值决策就可以引用某次具体的运行，而不是一段终端滚动记录。
 
-Acceptance scenarios:
+验收场景：
 
-1. `POST /evals` with a complete report stores it and answers with the run id.
-2. Recording the same run id twice does not duplicate rows.
-3. `GET /evals` lists runs newest first with mode, timestamp and case count; `GET /evals/{run_id}` returns the metrics and every per-case outcome.
-4. An unknown run id answers `404`; a body failing the strict schema answers `422`.
+1. 携带完整报告的 `POST /evals` 会将其存储，并返回运行 id。
+2. 同一个运行 id 被记录两次不会产生重复行。
+3. `GET /evals` 按最新在前列出运行，包含模式、时间戳与用例数；`GET /evals/{run_id}` 返回指标以及每个用例的结果。
+4. 未知运行 id 返回 `404`；请求体不满足严格 schema 时返回 `422`。
 
-### US2 - See the comparison at a glance
+### US2 - 一眼看出对比结果
 
-As the project owner, I need the dashboard to show, for the newest runs, the agreement rate and each mode's match, escalation, confirmation and success rates with latency and token summaries, so I can tell whether a change moved the numbers.
+作为项目负责人，我需要看板对最新的若干次运行展示一致率，以及每种模式的匹配率、升级率、确认率与成功率，并附延迟与 Token 摘要，这样我就能判断某项改动是否使数字发生了变化。
 
-Acceptance scenarios:
+验收场景：
 
-1. The eval list page shows one card per aggregate metric with the mode it belongs to.
-2. Latency is rendered with the existing duration formatter; token counts as plain numbers.
-3. A metric that a mode cannot produce (the LLM baseline has no policy outcome) renders as absent, not as zero.
-4. An unreachable API shows the same notice the run list uses.
+1. 评测列表页为每个聚合指标展示一张卡片，并标明它所属的模式。
+2. 延迟使用现有的时长格式化器渲染；Token 计数以纯数字展示。
+3. 某个模式无法产出的指标（LLM 基线没有策略判定结果）渲染为缺失，而不是零。
+4. API 不可达时展示与运行列表相同的提示。
 
-### US3 - Read one run case by case
+### US3 - 逐用例阅读一次运行
 
-As the project owner, I need a table of every case with both routers' actions, whether they agreed, and each side's latency and tokens, so a disagreement can be traced back to the goal that caused it.
+作为项目负责人，我需要一张覆盖每个用例的表格，包含两个路由层各自的动作、二者是否一致，以及每一侧的延迟与 Token，这样一次分歧就能追溯到导致它的目标。
 
-Acceptance scenarios:
+验收场景：
 
-1. Each row shows the case id and goal, the expected action, each mode's chosen action, agreement, latency and tokens.
-2. A case where a router errored shows the error instead of an action.
-3. Cases where only one mode ran render that side and mark the other absent.
-4. The rows are ordered by case id so two runs of the same case set line up.
+1. 每一行展示用例 id 与目标、期望动作、每种模式所选的动作、是否一致、延迟与 Token。
+2. 某路由层出错的用例展示错误信息而非动作。
+3. 只有一种模式运行过的用例仅渲染该侧，另一侧标记为缺失。
+4. 各行按用例 id 排序，使同一用例集的两次运行能够对齐。
 
-## Non-Goals
+## 非目标
 
-- No eval execution from the browser; runs stay a CLI act with explicit credentials.
-- No charts beyond the existing meter/readout vocabulary, unless a table cannot carry the number.
-- No retention or deletion policy for stored runs.
+- 不从浏览器执行评测；运行仍然是一次带显式凭据的命令行行为。
+- 除现有的 meter/readout 词汇之外不引入图表，除非表格无法承载该数字。
+- 不为已存储的运行制定保留或删除策略。
 
-## Dependencies
+## 依赖
 
-- Phase 11: the report shape (`CaseOutcome`, `ModeMetrics`, `ComparisonMetrics`) this phase persists and renders.
+- 第 11 阶段：本阶段所持久化并渲染的报告形态（`CaseOutcome`、`ModeMetrics`、`ComparisonMetrics`）。

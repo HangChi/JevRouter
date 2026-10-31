@@ -1,48 +1,48 @@
-# Feature Specification: Task State and Budget
+# 功能规格：任务状态与预算
 
-**Feature Branch**: `005-state-budget`
-**Status**: Complete
+**功能分支**：`005-state-budget`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Define the immutable task state and finite execution budget needed by later runner and verifier phases. This phase supplies validated state transitions and budget accounting, but does not route, execute tools, call models, or persist tasks.
+定义后续执行循环（Runner）与验证器阶段所需的不可变任务状态和有限执行预算。本阶段提供经过校验的状态转换与预算计量，但不做路由、不执行工具、不调用模型，也不持久化任务。
 
-## User Stories
+## 用户故事
 
-### US1 - Track task progress
+### US1 - 跟踪任务进度
 
-As an application developer, I need a typed task state containing the goal, current step, context, history, and latest result so each later decision can be grounded in the current task.
+作为应用开发者，我需要一个包含目标、当前步、上下文、历史与最新结果的类型化任务状态，以便后续每个决策都能以当前任务为依据。
 
-Acceptance scenarios:
-1. A new task starts at step zero with its supplied goal and optional context.
-2. Advancing a task returns a new state with exactly one additional step and updated history/result.
-3. Existing state and nested input data are not mutated by a transition.
-4. Empty goals and invalid step counts are rejected.
+验收场景：
+1. 新任务从第 0 步开始，带有传入的目标和可选上下文。
+2. 推进任务会返回一个新状态，其中恰好增加一步，并更新历史与结果。
+3. 状态转换不会修改既有状态和嵌套的输入数据。
+4. 空目标和非法步数会被拒绝。
 
-### US2 - Bound work
+### US2 - 约束工作量
 
-As an application developer, I need finite step and model-call budgets so a later agent loop can stop deterministically instead of running without bound.
+作为应用开发者，我需要有限的步数与模型调用预算，以便后续 agent 循环能够确定性地停止，而不是无限制地运行。
 
-Acceptance scenarios:
-1. A budget accepts finite non-negative limits and starts with all limits remaining.
-2. Consuming an available step or model call returns a new budget with the corresponding counter reduced by one.
-3. Exhausted budgets reject further consumption without changing the original budget.
-4. Zero limits are valid and immediately exhausted.
+验收场景：
+1. 预算接受有限的非负上限，初始时所有上限都保持剩余。
+2. 消耗一次可用的步数或模型调用会返回一个新预算，其中对应的计数器减一。
+3. 已耗尽的预算会拒绝进一步消耗，且不改变原预算。
+4. 零上限是合法的，并且会立即耗尽。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide immutable typed task state and step-history records.
-- **FR-002**: Keep goal, step index, context, history, and latest result in task state.
-- **FR-003**: State advancement creates new values and does not mutate caller-owned nested inputs.
-- **FR-004**: Provide finite step and model-call budgets with explicit remaining counts.
-- **FR-005**: Budget consumption is immutable and rejects exhausted counters.
-- **FR-006**: Validate external state and budget values at construction boundaries.
-- **FR-007**: Do not implement routing, tool execution, verification, persistence, or an agent loop in this phase.
-- **FR-008**: Offline tests cover transitions, immutability, invalid values, and exact exhaustion boundaries.
+- **FR-001**：提供不可变的类型化任务状态与步骤历史记录。
+- **FR-002**：在任务状态中保留目标、步索引、上下文、历史与最新结果。
+- **FR-003**：状态推进产生新值，不修改调用方拥有的嵌套输入。
+- **FR-004**：提供带有显式剩余计数的有限步数与模型调用预算。
+- **FR-005**：预算消耗是不可变的，并会拒绝已耗尽的计数器。
+- **FR-006**：在构造边界处校验外部传入的状态与预算值。
+- **FR-007**：本阶段不实现路由、工具执行、验证、持久化或 agent 循环。
+- **FR-008**：离线测试覆盖状态转换、不可变性、非法值以及精确的耗尽边界。
 
-## Success Criteria
+## 成功标准
 
-- State transitions and budget consumption are deterministic and immutable.
-- Invalid goals, counters, and budget limits fail at construction or transition boundaries.
-- Zero and exact-exhaustion cases are covered by offline tests.
-- Ruff, strict mypy, and the full offline test suite pass.
+- 状态转换与预算消耗是确定性且不可变的。
+- 非法的目标、计数器与预算上限会在构造或转换边界处失败。
+- 零值与精确耗尽的用例由离线测试覆盖。
+- Ruff、严格模式 mypy 以及完整离线测试套件通过。

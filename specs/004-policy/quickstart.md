@@ -1,4 +1,4 @@
-# Quickstart: Policy Engine
+# 快速开始：策略引擎
 
 ```python
 from jev_router import PolicyEngine, Router
@@ -14,6 +14,6 @@ elif decision.outcome == "ask_confirmation":
     await request_explicit_user_confirmation(decision.action)
 ```
 
-The policy outcome does not execute the tool. The caller owns execution, and an `ask_confirmation` result requires a separate explicit approval before any side effect.
+策略结果不会执行工具。执行由调用方负责；`ask_confirmation` 结果要求在任何副作用之前单独获得一次显式批准。
 
-Initial thresholds are MVP values described in `doc.md`, not vendor recommendations. Run `uv run pytest tests/test_policy.py` for offline policy tests.
+初始阈值是 `doc.md` 中描述的 MVP 取值，而非厂商建议。运行 `uv run pytest tests/test_policy.py` 执行离线策略测试。

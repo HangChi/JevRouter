@@ -1,76 +1,76 @@
-# Feature Specification: Trace Persistence
+# 特性规格：trace 持久化
 
-**Feature Branch**: `008-trace-persistence`
-**Status**: Complete
+**特性分支**：`008-trace-persistence`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Persist the traces the Runner already produces so a run can be inspected after the process exits. Storage consumes the immutable records from phase 7 and adds no new behaviour to the core loop.
+把 Runner 已经产出的 trace 持久化下来，使一次运行在进程退出之后仍可被检视。存储只消费第 7 阶段产出的不可变记录，不为核心循环增加任何新行为。
 
-## User Stories
+## 用户故事
 
-### US1 - Inspect a finished run
+### US1 - 检视一次已结束的运行
 
-As an application developer, I need to read back a run's task, steps and evaluations so a dashboard can show what happened.
+作为应用开发者，我需要回读一次运行的任务、步骤与评测结果，以便看板能够展示发生了什么。
 
-Acceptance scenarios:
-1. Recording a `RunResult` writes its task, steps and evaluations.
-2. Reading the task back returns its goal, terminal status, step count, diagnostic and final state.
-3. Reading the steps back returns records equivalent to the `StepTrace` values the Runner emitted.
-4. An unknown task reads as absent rather than raising.
+验收场景：
+1. 记录一个 `RunResult` 会写入它的任务、步骤与评测结果。
+2. 回读任务会返回它的目标、终态状态、步骤数、诊断信息与最终状态。
+3. 回读步骤会返回与 Runner 发出的 `StepTrace` 值等价的记录。
+4. 读取一个未知任务会表现为不存在，而不是抛出异常。
 
-### US2 - Inspect a run that is still going
+### US2 - 检视一次仍在进行的运行
 
-As an application developer, I need each step written as it happens so a killed process still leaves a diagnosable trace.
+作为应用开发者，我需要每个步骤在发生时就写入，这样即使进程被杀掉，也仍然留下可诊断的 trace。
 
-Acceptance scenarios:
-1. The store exposes a `TraceSink` that writes each step on emission.
-2. A task written only by the sink is marked `running` until `record()` finalizes it.
-3. `record()` replaces the running status with the terminal one without duplicating steps.
+验收场景：
+1. 存储暴露一个 `TraceSink`，在每次发出一条步骤时就写入该步骤。
+2. 仅由 sink 写入的任务会被标记为 `running`，直到 `record()` 将其定稿。
+3. `record()` 用在终态状态替换运行中状态，且不重复写入步骤。
 
-### US3 - Read old traces after the format changes
+### US3 - 在格式变化后读取旧 trace
 
-As an application developer, I need stored payloads to carry their format version so a schema change is detectable instead of silently misread.
+作为应用开发者，我需要已存储的载荷携带自己的格式版本，这样模式变化是可检测的，而不是被静默误读。
 
-Acceptance scenarios:
-1. Every stored JSON payload is wrapped in a versioned envelope.
-2. A payload with an unknown version is refused with a clear error.
-3. A malformed payload is refused with a clear error.
-4. A database whose schema version is newer than this build is refused.
+验收场景：
+1. 每个已存储的 JSON 载荷都包裹在带版本的信封中。
+2. 版本未知的载荷会被拒绝，并给出明确的错误。
+3. 格式错误的载荷会被拒绝，并给出明确的错误。
+4. 模式版本比本次构建更新的数据库会被拒绝。
 
-### US4 - Keep credentials and unreadable values out of the way
+### US4 - 让凭据与不可读的值远离现场
 
-As an application developer, I need storage that cannot leak a credential and cannot lose a run because one value would not serialize.
+作为应用开发者，我需要这样一种存储：它不会泄露凭据，也不会因为某个值无法序列化而丢掉整次运行。
 
-Acceptance scenarios:
-1. A run driven with a real client configuration stores no credential anywhere in the database file.
-2. A redaction callback is applied to results, arguments and state snapshots before encoding.
-3. A value the state snapshot already refused degrades to a marker that leaves the rest of the run readable.
+验收场景：
+1. 使用真实客户端配置驱动的运行不会在数据库文件的任何位置存储凭据。
+2. 在编码之前，对结果、参数与状态快照应用脱敏回调。
+3. 状态快照本身已经拒绝的值会降级为一个标记，使这次运行的其余部分仍可读。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide a SQLite-backed store for `tasks`, `agent_steps` and `evaluations`, driven only by `RunResult` and `StepTrace`.
-- **FR-002**: Place the store in the API layer; the core package gains no database dependency.
-- **FR-003**: Wrap every stored JSON payload in a versioned envelope and refuse unknown or malformed versions on read.
-- **FR-004**: Record the schema version and refuse a database newer than this build.
-- **FR-005**: Provide both an incremental sink and a whole-run `record()`, both idempotent for a repeated task.
-- **FR-006**: Reconstruct `StepTrace` values and a `TaskRecord` on read.
-- **FR-007**: Apply an optional redaction callback before encoding results, arguments and state snapshots.
-- **FR-008**: Degrade values JSON cannot hold instead of failing the whole write.
-- **FR-009**: Store no credential; the store never receives client configuration.
-- **FR-010**: Offline tests cover round-trip, incremental writes, versioning, redaction, degradation, isolation and the credential guarantee.
+- **FR-001**：为 `tasks`、`agent_steps` 与 `evaluations` 提供一个基于 SQLite 的存储，只由 `RunResult` 与 `StepTrace` 驱动。
+- **FR-002**：把存储放在 API 层；核心包不新增数据库依赖。
+- **FR-003**：把每个已存储的 JSON 载荷包裹在带版本的信封中，并在读取时拒绝未知或格式错误的版本。
+- **FR-004**：记录模式版本，并拒绝比本次构建更新的数据库。
+- **FR-005**：同时提供增量 sink 与整体运行的 `record()`，两者对重复的任务都是幂等的。
+- **FR-006**：在读取时重建 `StepTrace` 值与 `TaskRecord`。
+- **FR-007**：在编码结果、参数与状态快照之前，应用可选的脱敏回调。
+- **FR-008**：对 JSON 无法持有的值做降级处理，而不是让整次写入失败。
+- **FR-009**：不存储任何凭据；存储永远不会接收到客户端配置。
+- **FR-010**：离线测试覆盖往返、增量写入、版本化、脱敏、降级、隔离与凭据保证。
 
-## Success Criteria
+## 成功标准
 
-- A recorded run reads back with every trace field preserved.
-- A sink-written run is queryable before it finishes.
-- No credential appears anywhere in the database file.
-- Ruff, strict mypy and the full offline test suite pass.
+- 已记录的运行回读时，每个 trace 字段都得以保留。
+- 由 sink 写入的运行在完成之前即可查询。
+- 数据库文件的任何位置都不出现凭据。
+- Ruff、严格模式的 mypy 以及完整的离线测试套件全部通过。
 
-## Non-Goals
+## 非目标
 
-- HTTP endpoints, task submission, or confirmation workflows (the API phase).
-- Trace retention, deletion or access-control policy.
-- Migrations between schema versions; an unknown version is refused, not converted.
-- Async database drivers or a background writer.
-- Changes to the core package's trace or state contracts.
+- HTTP 端点、任务提交或确认工作流（属于 API 阶段）。
+- trace 的保留、删除或访问控制策略。
+- 模式版本之间的迁移；未知版本会被拒绝，而不是被转换。
+- 异步数据库驱动或后台写入器。
+- 对核心包的 trace 或状态契约的改动。

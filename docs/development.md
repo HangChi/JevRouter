@@ -44,21 +44,67 @@ npm run build
 
 `jev_router.tools` 提供可信应用代码配置的 `ToolRegistry` 和五个离线 MVP 工具：calculator、knowledge_search、web_search mock、write_file、send_mock_email mock。工具通过同步 `execute(input)` 接口返回 `ToolResult` 并声明 `read`、`write` 或 `external` 风险；该注册表只负责白名单注册、查找和调用，不包含路由或策略授权。搜索数据由调用方注入，邮件只生成模拟结果，均不访问网络。`WriteFileTool` 必须配置根目录，默认拒绝覆盖。
 
-## Router
+## 路由层（Router）
 
 `jev_router.Router` 基于调用方提供的任务状态、模型标识和 `ToolRegistry`，一次性请求下一动作、风险、确认需求及推理需求，并返回 `RouteDecision`。动作候选由注册工具和 `ask_user`、`delegate_to_llm`、`finish` 组成。Router 仅提供建议，不授权、不执行工具；本地决策由 Policy Engine 完成。
 
-## Task State and Budget
+## 任务状态与预算
 
-`jev_router.TaskState` stores immutable goal, context, completed-step history, and the latest result. `advance()` returns a new snapshot and does not mutate caller-owned JSON-compatible inputs. `ExecutionBudget` tracks finite step and model-call limits; each consume method returns a new budget and raises `ValueError` when exhausted. These types do not run an agent loop or perform I/O; the future Runner will own orchestration and budget-consumption points.
+`jev_router.TaskState` 保存不可变的 goal、context、已完成步骤的历史以及最近一次结果。`advance()` 返回新的快照，不修改调用方持有的 JSON 兼容输入。`ExecutionBudget` 跟踪有限的步骤上限与模型调用上限；每个消耗方法都返回一份新预算，额度耗尽时抛 `ValueError`。这些类型不运行 agent 循环，也不做 I/O；未来的执行循环（Runner）将拥有编排权与预算消耗点。
 
-## Policy Engine
+## 策略引擎
 
-`jev_router.PolicyEngine` 将 `RouteDecision` 映射为显式控制结果，不执行工具。MVP 初始阈值为 `requires_confirmation > 0.75` 或 `risk >= 2.5` 时请求确认；否则 `needs_reasoning > 0.70` 或动作置信度 `< 0.75` 时委托 LLM；其余已注册工具动作才返回 `execute`。`ask_user`、`delegate_to_llm`、`finish` 是对应控制分支，未注册动作拒绝。阈值是项目初值而非服务商推荐，应由 eval 校准。`execute` 不是执行调用；确认结果仍需调用方获取明确的用户批准。
+`jev_router.PolicyEngine` 将 `RouteDecision` 映射为显式控制结果，不执行工具。判定顺序是有意的：控制动作 → 未注册拦截 → **工具风险下限** → 概率阈值。
+
+- 工具声明为 `write` 或 `external` 时一律返回 `ask_confirmation`，与模型给出的概率无关。这条规则来自 `docs/security.md`：模型自报的风险分只是输入，不能当授权依据。
+- 其余已注册工具才看概率：`requires_confirmation > 0.75` 或 `risk >= 2.5` 请求确认；否则 `needs_reasoning > 0.70` 或动作置信度 `< 0.75` 委托 LLM；都不触发才返回 `execute`。
+- `ask_user`、`delegate_to_llm`、`finish` 是对应控制分支，未注册动作拒绝。
+
+四个阈值收在 `PolicyThresholds`（`confirmation` / `risk` / `reasoning` / `confidence`），可经 `Settings` 或环境变量 `JEV_CONFIRMATION_THRESHOLD`、`JEV_RISK_THRESHOLD`、`JEV_REASONING_THRESHOLD`、`JEV_ROUTE_CONFIDENCE_THRESHOLD` 覆盖。它们是项目初值而非服务商推荐值，改它应当由评测数据驱动。
+
+**风险下限曾经写在两个地方，这是一个真实的缺陷。** 早先执行循环自己用 `_CONFIRMING_RISKS` 强制确认，而评测只看 `policy.outcome == "ask_confirmation"`，于是同一套规则有两份实现、结论不一致：评测记录「17 条应当确认、实际触发 0 条」，而线上其实确认了。现在规则只在 `PolicyEngine` 里存在一份，执行循环与评测都跟随它的结论。
+
+`execute` 不是执行调用；确认结果仍需调用方获取明确的用户批准。
+
+## 阈值校准
+
+`evals --mode calibrate` 在**已记录的信号**上重放策略引擎，零 provider 调用：
+
+```sh
+uv run python -m evals --mode compare --json-out evals-report.json   # 一次真实运行，产出带信号的报告
+uv run python -m evals --mode calibrate --from-report evals-report.json --top 10
+```
+
+报告里每条用例都带 `confidence`、`risk`、`requires_confirmation_probability`、`needs_reasoning_probability` 和 `tool_risk`，校准器据此对每组候选阈值重跑 `PolicyEngine`，统计自动执行/确认/委托的分布、错误动作被自动执行的次数、确认失配数，并按 `EXECUTED_WRONG_WEIGHT` 等权重给出得分。评分规则写在 `evals/calibrate.py` 顶部，是一个显式的偏好声明而不是客观真理：把正确的动作自动执行掉是收益，把错误的动作自动执行掉是唯一真正危险的事件，因此重罚。
+
+排序键是「得分 → 确认失配 → 委托次数」，全部打平时偏向自动执行面更小的一侧。注意「更保守」在两个方向上不是同一个符号：置信度与推理阈值**越高**越保守（更多步骤交给 LLM），确认与风险阈值**越低**越保守（更多动作要求批准）。早先四个维度一律取高，等于在同分时把两个安全阀悄悄关掉。
+
+输出还会标注两类「不该照抄」的情况：`inert_dimensions`（在本批用例上怎么调都不改变结果，推荐值只是同分任取）与 `at_boundary`（取到搜索范围边沿，只能读作「网格内最好」）。
+
+## 阈值校准的实测记录（2026-10-31）
+
+53 条用例、`jev-latest` 对 `step-5-preview` 基线，四轮真实运行（run id 已落库）：
+
+| 运行 | 改动 | 期望命中 | 升级率 | 确认 |
+| --- | --- | --- | --- | --- |
+| `82085550`（50 例旧口径） | 无 | 56% | 56% | 0/17 |
+| `b73af4cd` | 确认规则收敛到策略引擎 | 81.1% | 62.3% | 16/17 |
+| `9b855385` | 改写工具描述 | 92.5% | 54.7% | 16/17 |
+| `d517a207` | `confidence` 校准到 0.65 | 92.5% | 50.9% | 16/17 |
+
+三点值得记下来：
+
+1. **确认行为被修复，是结构性的，不是阈值调出来的。** 旧口径下 17 条应当确认的用例触发 0 条；规则收敛后立刻变成 16 条。剩下的 1 条是路由器选了 `ask_user` 而非写工具，属于动作选择问题。
+2. **准确率的瓶颈不在阈值，在候选描述。** 10 个错误里 9 个是 `ask_user` 过度触发，集中在 `knowledge_search` 类用例（"API 的速率限制是多少？"这类问题本应查内部文档）。原描述 `"Search an injected set of local knowledge documents."` 描述的是实现而不是能力边界，模型无法据此判断「公司假期有几天」该归它管。改成说明「什么时候用」之后，同一批用例从 81.1% 到 92.5%。
+3. **四个阈值里只有置信度有数据支撑。** 确认、风险、推理三个维度在 53 条用例上怎么调都不改变任何一个结果——观察到的风险分最大 2.56、确认概率最大 0.77、推理概率最大 0.71，都够不到默认阈值。改动它们没有证据，只有 `confidence` 0.75→0.65 带来「两条正确动作恢复自动执行、升级 29→27、错误自动执行仍为 0」。
+
+另外，`JEV_TIMEOUT_SECONDS` 默认 30 秒在真实运行里偏紧：p95 约 2 秒，但长尾会撞到 30 秒，`know-006` 实测 30.2 秒超时并让该用例报错。部署建议 60。
+
+
 
 调用方通过 `JevClientConfig.from_env()` 构造配置，并将模型名传给 `JevClient.systemone(model=..., state=..., questions=...)`。决策请求没有默认自动重试。
 
-## Verifier
+## 验证器
 
 `jev_router.Verifier` 接收注入的 `JevClient` 和显式模型名，对已完成的 `TaskState` 发起一次 `systemone` 请求，同时提出 `task_complete`（noul）和 `result_quality`（score，四级图例 Not useful → Fully sufficient）两个问题，返回不可变的 `VerificationDecision`，包含 `completion_probability`、`quality_score`、`quality_confidence`、`quality_legend` 和 `model`。`NoulAnswer` 只提供概率，没有独立 confidence 字段，因此完成度没有单独的置信度。
 
@@ -66,13 +112,13 @@ npm run build
 
 verifier 只做评估：不设完成阈值、不修改状态、不执行工具、不循环，也不代替 Runner 决定结束或继续路由。
 
-## LLM Client
+## LLM 客户端
 
 `jev_router/clients/llm.py` 是与 `clients/jev.py` 对等的 LLM 适配器：冻结的 `LLMClientConfig`（key、base URL、超时、max tokens、API 版本）在构造时校验并提供 `from_env`，`LLMClient.complete(model=..., system=..., prompt=...)` 通过可注入的 httpx transport 发一次 Anthropic Messages API 请求，返回 `LLMCompletion`（text、model、input/output tokens）。错误分类与 Jev client 一致（`configuration`/`request_validation`/`transport`/`http`/`response_decoding`/`response_validation`），调用方按 `category` 处理，不解析供应商错误体。
 
 核心包不自行调用 LLM：适配器存在的意义是让 API 的委托分支、参数合成和 eval 的基线路由共用同一个经过测试的客户端。`RouteDecision` 带有可选的 `input_tokens`/`output_tokens`，来自响应的 `usage`，因为对比指标需要它；缺失时为 `None` 而不是 0。
 
-## Runner
+## 执行循环（Runner）
 
 `jev_router.Runner` 把 Router、PolicyEngine 和 Verifier 接成一个有界循环，并在内部用同一个 `ToolRegistry` 装配三者——这样执行前的注册复检不会因为调用方传入不同的 registry 实例而被绕过。`run(goal)` 返回不可变的 `RunResult`，含终止状态 `RunStatus`、最终 `TaskState`、剩余预算、`StepTrace` 序列和诊断信息。
 
@@ -82,7 +128,8 @@ verifier 只做评估：不设完成阈值、不修改状态、不执行工具�
 
 四个协作者通过 Protocol 注入，缺省全部 fail closed：`ActionInputResolver`（缺省 `{}`，由工具自身 schema 拒绝）、`ConfirmationHandler`（缺省 `needs_confirmation`）、`UserInputHandler`（缺省 `needs_user_input`）、`DelegateHandler`（缺省 `failed`）。`ActionInputResolver` 是参数合成的接缝——`RouteDecision` 只给动作名不给参数，而参数合成属于 LLM 职责；第十三阶段用 `LLMArgumentResolver` 填上了这个接缝。
 
-确认发生在参数合成**之后**：handler 收到的是即将执行的那份参数，而不是只有一个动作名。`tool.risk` 为 `write` 或 `external` 时，即使策略结论是 `execute` 也强制确认——这一条是 Policy Engine 阶段明确推迟到 Runner 的欠账，只信 Jev 概率会让 mock email 和 write_file 在低概率下被自动执行。
+确认发生在参数合成**之后**：handler 收到的是即将执行的那份参数，而不是只有一个动作名。是否需要确认完全取自策略引擎的结论，执行循环不再自己重复判断风险等级——两份实现迟早会在其中一处被人改掉，而另一处继续按老规则放行。
+
 
 provider 报错、工具拒绝输入、resolver 返回非 Mapping、`TaskState.advance` 拒绝结果，统统收敛为 `failed` 加诊断，不会有异常逃出 `run()`。`TraceSink.emit` 抛出的异常不会中断运行，因为 trace 已经记录在 `RunResult.traces` 里，丢失的只是实时投递。
 
@@ -118,15 +165,33 @@ eval 结果走同一套存储约定：`eval_runs`（一行一个 run，metrics �
 
 LLM 协作者是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配置（`LLM_API_KEY` + `LLM_MODEL`），要么同时缺省；只设其一在启动时报错。配置了才构造 `LLMDelegate` 和 `LLMArgumentResolver`（同在 `apps/api/llm.py`，共用一个 client 和 model）——前者把 LLM 生成的推理文本作为 `delegate_to_llm` 步骤的结果交给 Runner 记录，后者为即将执行的工具合成参数。一个配置驱动两者：能推理但不能参数化的 agent 没有用处。
 
-没有配置时保持第七阶段原始的 fail closed 行为：委托请求让 run 以 `failed` 停止并留下 "delegation was requested but no handler is configured"，工具调用则解析出空参数、由工具自己的 schema 拒绝。显式注入的 `resolver=` 优先于 LLM 的那一个——它是调用方自己的接缝（测试就用它）。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run；委托静默返回空、或用空参数执行工具，都比失败更糟。
+没有配置时保持第七阶段原始的 fail closed 行为：委托请求让 run 以 `failed` 停止并留下「路由要求委托，但没有配置委托处理器」，工具调用则解析出空参数、由工具自己的 schema 拒绝。显式注入的 `resolver=` 优先于 LLM 的那一个——它是调用方自己的接缝（测试就用它）。provider 报错被包成带 `category` 的 `ValueError` 抛出，由 service 的兜底 handler 转成 failed run；委托静默返回空、或用空参数执行工具，都比失败更糟。
+
+### 确认绑定与过期
+
+`docs/security.md` 要求「确认绑定 task、具体工具、参数摘要及过期时间；参数变化后必须重新确认」。实现方式是 `confirmation_digest(task_id, action, arguments)`：对三者做规范化 JSON 后取 sha256 前 16 位。`GET /tasks/{id}` 的 `pending_confirmation` 同时返回 `digest` 与 `expires_at`，`POST /tasks/{id}/confirm` 必须回传同一个 `digest`，不符即 `409`。
+
+过期由 `asyncio.wait_for` 实现，默认 900 秒（`JEV_CONFIRMATION_TTL_SECONDS`）。超时按「没有批准」处理，运行以 `needs_confirmation` 结束——一个悬着的确认不该在几小时后悄悄生效。摘要不匹配与「当前没有在等待确认」共用 `409`，但消息不同，前端可以照原样展示。
+
+### 鉴权
+
+`JEV_API_TOKEN` 未设置时 API 不做鉴权，启动时打一条 warning；设置后所有端点在依赖层校验 `Authorization: Bearer <token>`，用的是 `secrets.compare_digest`。默认不拦是为了本地仪表盘开箱可用——服务的边界约定是「默认只绑回环地址」，一旦对外提供服务就必须配置该变量。
+
+### 策略可见性
+
+`GET /policy` 返回当前生效的阈值、工具注册表里每个工具声明的风险等级及「是否必须确认」、确认的有效期和绑定内容。它读的是 `Settings` 与真实注册表，不是文档里的示例值——仪表盘 `/policy` 页据此渲染，因此「这一步为什么被拦下」可以被直接解释，而不必去读代码。
+
 
 `Tool` 协议因此多了一个成员 `input_model`：工具 `execute` 真正校验的那个 pydantic 模型。参数合成需要告诉模型该给什么，而唯一诚实的描述就是校验本身用的那份——从 `model_json_schema()` 派生提示词，使提示词不可能广告一个工具会拒绝的字段。模型的输出仍然是不可信输入：resolver 原样返回，工具自己的 schema 依旧是唯一权威。
 
 ## Web 层
 
-`apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的端点（六个任务相关 + 三个 eval 相关）。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
+`apps/web/` 是 Next.js 仪表盘，只读 `apps/api` 的端点（六个任务相关、三个 eval 相关、一个策略相关）。所有 API 调用都发生在服务端：server component 读，server action 写，浏览器只与 Next.js 服务器同源通信，因此 `apps/api` 不需要 CORS，凭证也不可能到达前端。上游地址来自 `API_UPSTREAM_URL`（默认 `http://127.0.0.1:8000`），这是该层唯一的配置。
 
-`src/lib/types.ts` 是 `apps/api/schemas.py` 的手写镜像，不是生成的客户端：API 是唯一事实来源，字段变更必须同步。`src/lib/thresholds.ts` 是 `jev_router/policy.py` 阈值的展示用副本，只用来画刻度线——仪表盘报告的结论永远是 API 返回的 `policy_outcome`，所以阈值副本即使漂移也不会改变结论，只会让刻度线失真；它们集中在一个模块里，就是为了让这种漂移只有一处可修。
+`src/lib/types.ts` 是 `apps/api/schemas.py` 的手写镜像，不是生成的客户端：API 是唯一事实来源，字段变更必须同步。`src/lib/thresholds.ts` 是 `jev_router/policy.py` 阈值的展示用副本，只用来画刻度线——仪表盘报告的结论永远是 API 返回的 `policy_outcome`。`/policy` 页展示的则是 `GET /policy` 给出的**真正生效的值**，所以「刻度线用的副本」和「页面展示的权威值」是两件事；副本漂移只会让刻度线失真，不会改变结论，集中在一个模块里就是为了让这种漂移只有一处可修。
+
+待确认区块会把 `digest` 一起交给 server action，并在参数下方显示这份批准的有效期；页面上看到的那份参数与最终执行的那份是同一份，这也是把摘要放进视图、而不是放进前端状态的原因。
+
 
 `src/lib/viewModel.ts` 是纯函数层：状态色调、步骤分支、概率表、分数读数、验证读数和决策链都在这里决定，组件只负责排版和着色。三个 `noul` 概率按 0–1 画成带阈值刻度的 meter；`route_risk` 和 `quality_score` 是核心包不做归一化的 provider score，因此只显示原始数值加有序色阶，并标注刻度范围（`scale 0–4`、`scale 0–3`），绝不画成 0–1 概率条。缺失字段渲染成「—」而不是 0：`NULL` 和真实的 `0.0` 是两件事。
 
@@ -136,7 +201,7 @@ LLM 协作者是可选装配：`Settings` 的 `llm`/`llm_model` 要么同时配�
 
 `/evals` 与 `/evals/[runId]` 是只读页面：eval run 是已结束的记录，不轮询、不起跑。列表页展示最新一次的聚合卡片，详情页一行一个用例并排两个路由的动作、延迟与 token。视图模型对“模式产生不了的指标”直接省略而不是画 0，对路由出错的行显示错误且不计入分歧——否则一致率会被提供方故障拉低。
 
-## Eval
+## 评测
 
 `evals/` 只依赖 `jev_router` 的公开接口（`evals/cli.py` 除外，它是唯一跨层模块，用 `apps.api.schemas` 的模型向运行中的 API 投递报告）。模块各司其职：`cases.py`（严格 `EvalCase` 模型与版本化 loader）、`cases.json`（53 条固定用例，覆盖五个工具和三个控制动作）、`registry.py`（带固定 fixture 的五工具注册表，保证可复现且离线）、`llm_router.py`（LLM 基线路由，候选集与 `jev_router.Router` 完全一致，要求严格 JSON 输出）、`runner.py`（逐用例路由一次、过一遍真实 PolicyEngine、产出 `CaseOutcome`）、`metrics.py`（纯聚合）、`report.py`（版本化报告序列化）。
 

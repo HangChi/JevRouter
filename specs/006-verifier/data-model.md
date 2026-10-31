@@ -1,17 +1,17 @@
-# Data Model: Jev Verifier
+# 数据模型：Jev 验证器
 
 ## VerificationDecision
 
-An immutable assessment returned by one Jev request:
+由一次 Jev 请求返回的不可变评估：
 
-- `completion_probability`: Noul estimate that the current result satisfies the goal.
-- `quality_score`: numeric result quality score.
-- `quality_confidence`: confidence reported for that score.
-- `quality_legend`: ordered labels used in the score question.
-- `model`: model identifier returned by the provider.
+- `completion_probability`：Noul 对当前结果满足目标的估计。
+- `quality_score`：数值型的结果质量分。
+- `quality_confidence`：为该分数报告的置信度。
+- `quality_legend`：用于质量分问题的有序标签。
+- `model`：提供商返回的模型标识符。
 
-`NoulAnswer` carries only a probability, so the completion assessment has no separate confidence value; `quality_confidence` comes from the score answer.
+`NoulAnswer` 只携带一个概率，因此完成度评估没有单独的置信度值；`quality_confidence` 来自质量分答案。
 
 ## Verifier
 
-An asynchronous adapter configured with a `JevClient` and explicit model identifier. It accepts a completed `TaskState`, requests completion and quality together, and returns `VerificationDecision` without modifying the state or deciding what happens next.
+一个异步适配器，使用 `JevClient` 与显式的模型标识符进行配置。它接受已完成的 `TaskState`，一并请求完成度与质量，并返回 `VerificationDecision`，而不修改状态，也不决定后续发生什么。

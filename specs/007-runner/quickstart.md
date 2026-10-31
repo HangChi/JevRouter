@@ -1,4 +1,4 @@
-# Quickstart: Bounded Runner
+# 快速开始：有界执行循环（Runner）
 
 ```python
 import asyncio
@@ -90,6 +90,6 @@ async def main():
 asyncio.run(main())
 ```
 
-A `write` or `external` risk tool additionally requires a `ConfirmationHandler`; without one the run stops at `needs_confirmation` before any side effect. The handler receives the resolved arguments, so it can show the user exactly what will run.
+`write` 或 `external` 风险工具额外需要一个 `ConfirmationHandler`；若没有，运行会在任何副作用发生之前停在 `needs_confirmation`。该处理器接收解析后的参数，因此可以准确告知用户将要运行什么。
 
-Run offline checks with `uv run pytest tests/test_runner.py` and the full project checks.
+通过 `uv run pytest tests/test_runner.py` 运行离线检查，并运行完整的项目检查。

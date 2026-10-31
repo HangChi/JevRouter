@@ -1,82 +1,82 @@
-# Feature Specification: Jev Client Foundation
+# 功能规格：Jev 客户端基础
 
-**Feature Branch**: `jev-client-foundation`  
-**Created**: 2026-09-23  
-**Status**: Complete
+**功能分支**：`jev-client-foundation`  
+**创建日期**：2026-09-23  
+**状态**：已完成
 
-## User Scenarios & Testing
+## 用户场景与测试
 
-### User Story 1 - Submit typed decision questions (Priority: P1)
+### 用户故事 1 - 提交类型化的决策问题（优先级：P1）
 
-As an application developer, I need to submit a shared state with one or more supported typed questions and receive their structured answers so that downstream application policy can make deterministic choices.
+作为应用开发者，我需要提交一个共享状态以及一个或多个受支持的类型化问题，并获取它们的结构化答案，以便下游的应用策略能够做出确定性的选择。
 
-**Why this priority**: This is the Jev client’s primary decision capability and supports the project's later router without implementing it now.
+**为何是这个优先级**：这是 Jev 客户端的核心决策能力，并支撑项目后续的路由层（Router），但当前阶段并不实现路由层。
 
-**Independent Test**: Mock the service boundary and verify serialization and parsing for `noul`, `choice`, and `score`, including mixed question types in a single request.
+**独立测试**：模拟服务边界，并验证 `noul`、`choice` 和 `score` 的序列化与解析，包括在单个请求中混合多种问题类型。
 
-**Acceptance Scenarios**:
-1. **Given** valid shared state and one valid question, **When** the client submits a decision request, **Then** the documented request shape is sent and its typed answer is returned.
-2. **Given** valid questions of all supported types, **When** submitted together, **Then** each response is associated with its question and preserves documented confidence/probability information.
-3. **Given** an unsupported or invalid question, **When** submitted, **Then** validation rejects it before sending a network request.
-4. **Given** a response missing required fields, containing invalid probabilities, or inconsistent with the question type, **When** parsed, **Then** the client reports a response-validation error rather than fabricating a decision.
-5. **Given** an HTTP error, timeout, or unavailable service, **When** a decision is requested, **Then** the client returns a typed failure and does not silently retry a potentially billable request.
+**验收场景**：
+1. **给定**合法的共享状态和一个合法问题，**当**客户端提交决策请求时，**那么**会发送文档所描述的请求形态，并返回其类型化答案。
+2. **给定**所有受支持类型的合法问题，**当**它们被一起提交时，**那么**每个响应都与对应的问题关联，并保留文档所描述的置信度／概率信息。
+3. **给定**不支持或非法的问题，**当**其被提交时，**那么**校验会在发送网络请求之前拒绝它。
+4. **给定**一个缺少必需字段、包含非法概率或与问题类型不一致的响应，**当**其被解析时，**那么**客户端会报告一个响应校验错误，而不会凭空捏造一个决策。
+5. **给定**HTTP 错误、超时或服务不可用，**当**请求决策时，**那么**客户端会返回类型化的失败，并且不会静默重试一个可能产生计费的请求。
 
-### User Story 2 - Configure and operate the client safely (Priority: P2)
+### 用户故事 2 - 安全地配置和运行客户端（优先级：P2）
 
-As an operator, I need to configure the service endpoint, credential, and timeouts outside source code so that the client can run in local and deployed environments without leaking secrets.
+作为运维人员，我需要在源代码之外配置服务端点、凭据和超时，以便客户端可以在本地和已部署环境中运行而不泄露机密。
 
-**Independent Test**: Instantiate configuration with valid and invalid values, and verify headers and exception/log output never reveal the credential.
+**独立测试**：使用合法和非法取值实例化配置，并验证请求头与异常／日志输出始终不会暴露凭据。
 
-**Acceptance Scenarios**:
-1. **Given** valid configuration, **When** the client is created, **Then** it uses the configured endpoint and finite connection/read timeouts.
-2. **Given** missing or invalid required configuration, **When** configuration is validated, **Then** startup fails with a clear message that does not contain secret values.
-3. **Given** any service response or exception, **When** it is surfaced to callers or logs, **Then** authorization secrets are absent.
+**验收场景**：
+1. **给定**合法配置，**当**客户端被创建时，**那么**它会使用所配置的端点以及有限的连接／读取超时。
+2. **给定**缺失或非法的必需配置，**当**配置被校验时，**那么**启动会以一条清晰且不包含机密取值的消息失败。
+3. **给定**任意的服务响应或异常，**当**其呈现给调用方或写入日志时，**那么**鉴权机密都不存在。
 
-## Edge Cases
+## 边界情况
 
-- Empty state, non-JSON-compatible state values, no questions, excessive question count, empty choice options, and duplicate question names.
-- Choice responses whose selected value is not among the submitted options.
-- Probability values outside [0, 1], non-finite numbers, missing probability maps, and confidence inconsistent with the provider schema.
-- Score questions with no criteria or response scores outside the documented scale.
-- Unexpected content type, invalid JSON, oversized response, rate limiting, server errors, and cancellation.
-- Caller-supplied endpoint with trailing slash or path prefix; ensure endpoint joining does not change configured base path unexpectedly.
+- 空状态、无法与 JSON 兼容的状态取值、没有问题、问题数量过多、空的选项列表，以及重复的问题名称。
+- 所选取值不在所提交选项之内的 Choice 响应。
+- 超出 [0, 1] 的概率取值、非有限数值、缺失的概率映射，以及与提供方 schema 不一致的置信度。
+- 没有评分标准（criteria）的分数问题，或响应分数超出文档所述量程。
+- 非预期的内容类型、非法 JSON、过大的响应、限流、服务器错误，以及取消操作。
+- 调用方提供的端点带尾部斜杠或路径前缀；确保端点拼接不会意外改变所配置的基础路径。
 
-## Requirements
+## 需求
 
-### Functional Requirements
+### 功能需求
 
-- **FR-001**: The client MUST support the documented `POST /v1/systemone` decision operation; model discovery is outside this feature's scope.
-- **FR-002**: The client MUST support submitting a shared JSON-compatible state and named questions of types `noul`, `choice`, and `score`.
-- **FR-003**: The client MUST allow multiple supported question types in one request and associate each validated answer with its question name.
-- **FR-004**: The client MUST validate request question definitions before network transmission.
-- **FR-005**: The client MUST validate service responses against the selected question type and preserve documented probability and confidence data.
-- **FR-006**: The client MUST distinguish configuration, transport/timeout, HTTP, JSON decoding, and schema validation failures using typed errors.
-- **FR-007**: The client MUST apply finite configurable timeouts and MUST NOT automatically retry decision requests by default.
-- **FR-008**: The client MUST keep authentication credentials out of returned data, logs, and exception messages.
-- **FR-009**: Model selection MUST be supplied by the caller or derived from an explicit discovery result; the client MUST NOT permanently hard-code an account-specific model identifier.
-- **FR-010**: Tests MUST exercise all supported question types and error classes using a mocked transport, without requiring live credentials.
-- **FR-011**: The scope MUST be limited to the reusable Jev service client, its configuration, typed request/response models, tests, and usage documentation; router, tools, runner, verifier, API, dashboard, and persistence are excluded.
+- **FR-001**：客户端必须支持文档所述 `POST /v1/systemone` 决策操作；模型发现不在本特性范围内。
+- **FR-002**：客户端必须支持提交一个与 JSON 兼容的共享状态，以及名为 `noul`、`choice` 和 `score` 类型的具名问题。
+- **FR-003**：客户端必须允许在单个请求中包含多个受支持的问题类型，并将每个已校验的答案与它的问题名称关联。
+- **FR-004**：客户端必须在进行网络传输之前校验请求中的问题定义。
+- **FR-005**：客户端必须依据所选问题类型校验服务响应，并保留文档所描述的概率与置信度数据。
+- **FR-006**：客户端必须使用类型化错误来区分配置、传输／超时、HTTP、JSON 解码和 schema 校验失败。
+- **FR-007**：客户端必须应用有限的、可配置的超时，并且默认不得自动重试决策请求。
+- **FR-008**：客户端必须将鉴权凭据排除在返回数据、日志和异常消息之外。
+- **FR-009**：模型选择必须由调用方提供，或来自一次显式的模型发现结果；客户端不得永久硬编码某个账户专属的模型标识符。
+- **FR-010**：测试必须使用模拟传输覆盖所有受支持的问题类型和错误类别，且不需要真实凭据。
+- **FR-011**：范围必须限定在可复用的 Jev 服务客户端、其配置、类型化请求／响应模型、测试和使用文档之内；路由层、工具、执行循环（Runner）、验证器、API、仪表盘和持久化均被排除。
 
-### Key Entities
+### 关键实体
 
-- **DecisionRequest**: Selected model, shared state, and named question definitions.
-- **QuestionDefinition**: A question name, supported type, instructions, and type-specific criteria/options.
-- **DecisionResponse**: Validated per-question typed answer and provider-supplied probability/confidence metadata.
-- **JevClientConfig**: Service base URL, credential, and finite timeout configuration.
-- **JevClientError**: Sanitized typed failure category with safe diagnostic context.
+- **DecisionRequest**：所选模型、共享状态，以及具名的问题定义。
+- **QuestionDefinition**：一个问题名称、受支持的类型、指令，以及特定类型对应的评分标准／选项。
+- **DecisionResponse**：经校验的逐问题类型化答案，以及提供方给出的概率／置信度元数据。
+- **JevClientConfig**：服务基础 URL、凭据，以及有限的超时配置。
+- **JevClientError**：经过脱敏的类型化失败类别，附带安全的诊断上下文。
 
-## Success Criteria
+## 成功标准
 
-- **SC-001**: All three supported question types can be represented and validated before a request is sent.
-- **SC-002**: A mixed-question request round-trips through mocked service responses with answers correctly associated to 100% of question names.
-- **SC-003**: Every defined configuration, transport, HTTP, decoding, and schema failure has a deterministic typed error and a passing automated test.
-- **SC-004**: The complete test suite runs without network access, service credentials, or billable requests.
-- **SC-005**: No test, captured log, returned error, or documentation example contains a real credential.
+- **SC-001**：所有三种受支持的问题类型都能在发送请求之前被表示并校验。
+- **SC-002**：混合问题的请求能够通过模拟服务响应完成往返，且答案与 100% 的问题名称正确关联。
+- **SC-003**：每一个已定义的配置、传输、HTTP、解码和 schema 失败都有确定性的类型化错误，并且都有通过的自动化测试。
+- **SC-004**：完整的测试套件无需网络访问、服务凭据或计费请求即可运行。
+- **SC-005**：没有任何测试、抓取的日志、返回的错误或文档示例包含真实凭据。
 
-## Assumptions
+## 假设
 
-- The first implementation is a Python library module used by the planned Python agent core.
-- The official service contract is authoritative. Product-design examples in `doc.md` illustrate intended usage but are not treated as proof of exact wire schemas.
-- The client will use asynchronous HTTP and dependency injection for transport, enabling deterministic tests.
-- Safe defaults include finite timeouts, no automatic retries for decisions, and credential redaction.
-- Endpoint base URL and credential names will be documented as configuration inputs; real values remain operator-provided.
+- 首个实现是一个 Python 库模块，供规划中的 Python 智能体核心使用。
+- 官方服务契约具有权威性。`doc.md` 中的产品设计示例说明了预期用法，但不被视为确切线上 schema 的证明。
+- 客户端将使用异步 HTTP，并对传输层采用依赖注入，从而实现确定性的测试。
+- 安全默认值包括有限的超时、决策不自动重试，以及凭据脱敏。
+- 端点基础 URL 和凭据名称将作为配置输入记录在文档中；真实取值仍由运维人员提供。

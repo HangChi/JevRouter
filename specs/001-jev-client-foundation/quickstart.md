@@ -1,20 +1,20 @@
-# Quickstart Validation: Jev Client Foundation
+# 快速开始验证：Jev 客户端基础
 
-## Prerequisites
+## 前置条件
 
-- Python 3.9 or newer supported by the selected lockfile.
-- `uv` installed.
-- No live API key is needed for tests.
+- Python 3.9 或更新版本，且受所选锁定文件支持。
+- 已安装 `uv`。
+- 测试无需真实 API 密钥。
 
-## Install
+## 安装
 
-From the repository root:
+在仓库根目录执行：
 
 ```sh
 uv sync --all-groups
 ```
 
-## Offline validation
+## 离线验证
 
 ```sh
 uv run ruff check .
@@ -22,10 +22,10 @@ uv run mypy jev_router
 uv run pytest
 ```
 
-Expected result: all tests pass without network access or billable service requests. Mocked transport tests verify all three question types, mixed requests, validation, failures, and credential redaction.
+预期结果：所有测试在无网络访问、无计费服务请求的情况下通过。模拟传输测试会验证全部三种问题类型、混合请求、校验、失败场景以及凭据脱敏。
 
-## Optional local usage
+## 可选的本地使用
 
-Set `JEV_API_KEY` in an ignored local `.env` file or export it in the server environment. The key is never placed in source, client-side code, docs, or test fixtures. Supply the desired model identifier explicitly when making a decision request.
+在被忽略的本地 `.env` 文件中设置 `JEV_API_KEY`，或在服务器环境中导出它。该密钥绝不放入源代码、客户端代码、文档或测试夹具中。发起决策请求时，须显式提供所需的模型标识符。
 
-A live service call is deliberately not part of the default quickstart because it may incur cost. Do not use a credential previously exposed in chat; rotate it before any authorized live call.
+真实服务调用被有意排除在默认快速开始之外，因为它可能产生费用。不要使用此前在聊天中暴露过的凭据；在任何获得授权的真实调用之前，请先轮换该凭据。

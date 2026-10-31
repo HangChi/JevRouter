@@ -1,6 +1,6 @@
-# Quickstart: Web Trace Dashboard
+# 快速开始：Web trace 看板
 
-The dashboard is a reader of the API from phase 9. Start the API first, then the web app.
+看板是第 9 阶段 API 的读取方。先启动 API，再启动 Web 应用。
 
 ```sh
 # Terminal 1 — the API (needs a real credential for live runs)
@@ -17,18 +17,18 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. The dashboard reads the API from `API_UPSTREAM_URL`, which defaults to `http://127.0.0.1:8000`:
+打开 <http://localhost:3000>。看板从 `API_UPSTREAM_URL` 读取 API，该变量默认为 `http://127.0.0.1:8000`：
 
 ```sh
 # apps/web/.env
 API_UPSTREAM_URL=http://127.0.0.1:8000
 ```
 
-Submit a goal from the home page and follow the link to its task page. A `write` or `external` risk action pauses the run; the task page shows the action and its resolved arguments and waits for approve or deny.
+从首页提交一个目标，然后顺着链接进入它的任务页面。一个 `write` 或 `external` 风险的动作会让运行暂停；任务页面会展示该动作及其已解析的参数，并等待批准或否决。
 
-The provider credential stays in the API process. The browser only ever talks to the Next.js server, which is the only component that knows `API_UPSTREAM_URL`.
+供应商凭据留在 API 进程中。浏览器只与 Next.js 服务器通信，而 Next.js 服务器是唯一知道 `API_UPSTREAM_URL` 的组件。
 
-## Checks
+## 检查
 
 ```sh
 cd apps/web
@@ -37,7 +37,7 @@ npm run test
 npm run build
 ```
 
-The Python checks are unchanged and stay green because this phase touches no Python file:
+Python 检查未改动，且保持全绿，因为本阶段不触碰任何 Python 文件：
 
 ```sh
 uv run ruff check .

@@ -1,36 +1,36 @@
-# Tasks: API HTTP Boundary
+# 任务：API HTTP 边界
 
-## Phase 1: Configuration and Schemas
+## 阶段 1：配置与模式
 
-- [x] T001 Add `fastapi` and `uvicorn` as runtime dependencies with upper bounds.
-- [x] T002 Define the frozen `Settings` model with environment loading and startup validation in `apps/api/config.py`.
-- [x] T003 Define strict request/response models and the live-status constants in `apps/api/schemas.py`.
-- [x] T004 Reject blank goals at the schema boundary rather than starting a doomed run.
+- [x] T001 把 `fastapi` 与 `uvicorn` 作为运行时依赖加入，并带上界约束。
+- [x] T002 在 `apps/api/config.py` 中定义冻结的 `Settings` 模型，含环境加载与启动校验。
+- [x] T003 在 `apps/api/schemas.py` 中定义严格的请求/响应模型与实时状态常量。
+- [x] T004 在模式边界上拒绝空白目标，而不是启动一次注定失败的运行。
 
-## Phase 2: Service and Routes
+## 阶段 2：服务与路由
 
-- [x] T005 Implement `TaskService` with an in-memory run registry and future-based prompts.
-- [x] T006 Bind confirmation and input requests to a task id through a per-run handler adapter.
-- [x] T007 Surface the live status and pending prompt on the run handle.
-- [x] T008 Persist a finished run and keep its terminal status even if persistence fails.
-- [x] T009 Implement the six routes with `404`/`409`/`422`/`400` error mapping.
-- [x] T010 Provide `default_registry(settings)` and close the store only when the app owns it.
+- [x] T005 实现 `TaskService`，含内存运行注册表与基于 future 的提示。
+- [x] T006 通过每次运行专属的处理器适配器，把确认与输入请求绑定到任务 id。
+- [x] T007 在运行句柄上暴露实时状态与待处理的提示。
+- [x] T008 持久化已结束的运行，即使持久化失败也保留其终态状态。
+- [x] T009 实现六个路由，含 `404`/`409`/`422`/`400` 错误映射。
+- [x] T010 提供 `default_registry(settings)`，并且仅在应用拥有存储时才关闭它。
 
-## Phase 3: Tests and Documentation
+## 阶段 3：测试与文档
 
-- [x] T011 Extract the shared offline doubles into `tests/support.py` and reuse them across test modules.
-- [x] T012 Test every endpoint, error mapping and list ordering in `tests/test_api.py`.
-- [x] T013 Test the confirmation and input round trips, including denial and wrong-phase calls.
-- [x] T014 Test that no response body carries the credential.
-- [x] T015 Test startup configuration validation.
-- [x] T016 Document scope, data model and phase boundaries in this spec directory.
-- [x] T017 Update architecture and development documentation for the API layer.
-- [x] T018 Run Ruff, strict mypy and full offline pytest; boot the app under uvicorn and exercise it with curl.
+- [x] T011 把共用的离线替身抽取到 `tests/support.py`，并在各测试模块中复用。
+- [x] T012 在 `tests/test_api.py` 中测试每个端点、错误映射与列表排序。
+- [x] T013 测试确认与输入的往返，包括否决与错误阶段的调用。
+- [x] T014 测试没有任何响应体携带凭据。
+- [x] T015 测试启动时的配置校验。
+- [x] T016 在本规格目录中记录范围、数据模型与阶段边界。
+- [x] T017 为 API 层更新架构与开发文档。
+- [x] T018 运行 Ruff、严格 mypy 与完整的离线 pytest；在 uvicorn 下启动应用并用 curl 实际调用。
 
-## Dependencies
+## 依赖关系
 
-T001–T004 precede T005–T010. T011–T018 follow implementation and tests.
+T001–T004 先于 T005–T010。T011–T018 在实现与测试之后进行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. The API layer carries requests and responses only; it adds no agent behaviour and changes no core contract.
+所有任务只有在实现与验证之后才会被勾选。API 层只承载请求与响应；它不增加智能体行为，也不改动任何核心契约。

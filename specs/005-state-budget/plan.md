@@ -1,28 +1,28 @@
-# Implementation Plan: Task State and Budget
+# 实现计划：任务状态与预算
 
-## Summary
+## 概述
 
-Add an immutable domain model for task progress and a deterministic budget value object. These are the foundations for the later execution loop without coupling this phase to providers, tools, or persistence.
+为任务进度新增不可变的领域模型，并新增确定性的预算值对象。这些是后续执行循环的基础，同时让本阶段不耦合到提供商、工具或持久化。
 
-## Technical Context
+## 技术背景
 
-- Core package: `jev_router`.
-- Existing public decisions: `RouteDecision` and `PolicyDecision`.
-- State payloads may be JSON-compatible scalar/container values supplied by the application.
-- Tests: offline pytest only; no Jev request or tool execution is needed.
+- 核心包：`jev_router`。
+- 既有公开决策：`RouteDecision` 与 `PolicyDecision`。
+- 状态载荷可以是应用提供的、JSON 兼容的标量/容器值。
+- 测试：仅使用离线 pytest；无需发起 Jev 请求或执行工具。
 
-## Design
+## 设计
 
-Use frozen dataclasses for `TaskState`, `StepRecord`, and `ExecutionBudget`. Deep-copy caller-owned JSON-compatible values on construction and transitions to ensure state snapshots cannot be altered through retained input references. Task state includes goal, current step index, context, immutable history, and optional latest result. Advancing appends one record and returns a new state. Budget records maximum and remaining step/model-call counts; consume methods return new budgets and raise `ValueError` when the requested counter is exhausted. Limits are finite non-negative integers; bool is not accepted as an integer limit.
+为 `TaskState`、`StepRecord` 与 `ExecutionBudget` 使用冻结数据类。在构造和转换时深拷贝调用方拥有的 JSON 兼容值，以确保状态快照无法通过保留的输入引用被改动。任务状态包含目标、当前步索引、上下文、不可变历史以及可选的最新结果。推进操作追加一条记录并返回新状态。预算记录步数与模型调用的最大值与剩余计数；消耗方法返回新预算，并在所请求的计数器已耗尽时抛出 `ValueError`。上限为有限的非负整数；bool 不被接受为整数上限。
 
-No status machine or orchestration behavior is added: finish/stop outcomes remain the responsibility of the future runner contract. No storage serialization is added in this phase.
+不新增状态机或编排行为：结束/停止结果仍属于未来执行循环契约的职责。本阶段不新增存储序列化。
 
-## Non-Goals
+## 非目标
 
-- Router, policy, model calls, or tool execution.
-- Verifier, runner loop, persistence, API, dashboard, or eval runner.
-- Timeouts, monetary budgets, token estimates, or dynamic budget refill.
+- 路由层、策略、模型调用或工具执行。
+- 验证器、执行循环、持久化、API、仪表盘或评测运行器。
+- 超时、货币预算、token 估算或动态预算补充。
 
-## Validation Strategy
+## 验证策略
 
-Run `uv run ruff check .`, `uv run mypy jev_router`, and `uv run pytest`. Test snapshot isolation, single-step advancement, initial and exact exhaustion, zero limits, and invalid construction/consumption values.
+运行 `uv run ruff check .`、`uv run mypy jev_router` 与 `uv run pytest`。测试快照隔离、单步推进、初始耗尽与精确耗尽、零上限以及非法的构造/消耗值。

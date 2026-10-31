@@ -1,4 +1,4 @@
-# Data Model: LLM Argument Synthesis
+# 数据模型：LLM 参数合成
 
 ## `Tool.input_model` (`jev_router/tools/base.py`)
 
@@ -12,74 +12,69 @@ class Tool(Protocol):
     def execute(self, input: dict[str, Any]) -> ToolResult: ...
 ```
 
-The pydantic model the tool's `execute` already validates against. It is the
-single source of truth for two consumers: the tool's own validation, and the
-prompt the argument resolver builds. Nothing else describes a tool's input, so
-the two cannot drift — the dangerous direction, because a drifted prompt would
-advertise a field the tool refuses and look like a working call.
+工具 `execute` 本就据以校验的 pydantic 模型。它是两个使用方的单一事实来源：工具
+自身的校验，以及参数解析器构建的提示词。除此之外没有任何东西描述工具的输入，因此
+二者不会漂移——危险的方向正在于此，因为漂移的提示词会宣称某个工具会拒绝的字段，
+从而看起来像一次成功的调用。
 
-The declared type is widened to `type[BaseModel]` on each tool
-(`input_model: type[BaseModel] = CalculatorInput`) because protocol members are
-invariant: `type[CalculatorInput]` is not assignable to `type[BaseModel]`.
+在每个工具上声明的类型被放宽为 `type[BaseModel]`
+（`input_model: type[BaseModel] = CalculatorInput`），因为协议成员是不变的：
+`type[CalculatorInput]` 不能赋值给 `type[BaseModel]`。
 
-| Tool | Model | Notes |
+| 工具 | 模型 | 说明 |
 | --- | --- | --- |
-| `calculator` | `CalculatorInput` | `expression`, max 256 |
-| `knowledge_search` | `SearchInput` | `query`, optional `limit` |
-| `web_search` | `SearchInput` | shared with knowledge search |
-| `write_file` | `WriteFileInput` | `path`, `content` |
-| `send_mock_email` | `MockEmailInput` | `to`, `subject`, `body` |
+| `calculator` | `CalculatorInput` | `expression`，最大 256 |
+| `knowledge_search` | `SearchInput` | `query`，可选 `limit` |
+| `web_search` | `SearchInput` | 与知识搜索共用 |
+| `write_file` | `WriteFileInput` | `path`、`content` |
+| `send_mock_email` | `MockEmailInput` | `to`、`subject`、`body` |
 
-Each field now carries `Field(description=...)`. The generated schema previously
-said only `{"expression": {"type": "string", "maxLength": 256}}` — enough to
-guess a name, not enough to produce a *correct* value. `write_file`'s path rule
-(relative, inside the workspace root, no overwrite) lives in the tool's body, so
-without prose the model would emit absolute paths and every write would fail.
+现在每个字段都带有 `Field(description=...)`。此前生成的 schema 只写
+`{"expression": {"type": "string", "maxLength": 256}}`——足以猜出字段名，但不足
+以产出一个*正确*的值。`write_file` 的路径规则（相对路径、位于工作区根目录内、
+不覆盖已存在文件）存在于工具的实现体内，因此没有散文说明时模型会输出绝对路径，
+每次写入都会失败。
 
-## The resolver (`apps/api/llm.py`)
+## 解析器 (`apps/api/llm.py`)
 
 ```text
 LLMArgumentResolver(client: Completer, model: str, tools: ToolRegistry)
     async def resolve(action: str, state: TaskState) -> dict[str, Any]
 ```
 
-Prompt sections, in order: the state block (goal, step, context, clipped
-history, last result), the action, the tool's description and risk, the rendered
-schema, and the response contract.
+提示词各段落依次为：状态块（目标、步骤、上下文、裁剪后的历史、上一次结果）、
+动作、工具的描述与风险等级、渲染出的 schema，以及响应契约。
 
-The schema renderer emits one line per field:
+schema 渲染器为每个字段输出一行：
 
 ```text
 - path (string, required) [min length 1; max length 512]: A relative path inside the workspace root; absolute paths and '..' are refused, and an existing file is not overwritten.
 - limit (integer, optional, defaults to 5) [min 1; max 20]: How many results to return at most.
 ```
 
-Only what changes whether the tool accepts the value is rendered — titles and
-`additionalProperties` are dropped.
+只渲染会影响工具是否接受该值的内容——标题与 `additionalProperties` 被丢弃。
 
-Parsing: the whole completion is tried as JSON, then the first brace-balanced
-object is extracted (so a fenced answer works). The result must be a non-empty
-object sharing at least one key with the tool's fields. Anything else raises
-`ValueError`, which escapes `Runner.run()` and becomes a failed run through
-`TaskService._drive`'s existing catch-all.
+解析：先把整个补全结果当作 JSON 尝试，再提取第一个括号配平的对象（因此围栏包裹的
+答案也可用）。结果必须是一个非空对象，且至少与工具字段有一个共同的键。其余情况都
+抛出 `ValueError`，它会从 `Runner.run()` 逃逸，并经 `TaskService._drive` 既有的
+兜底捕获变成一次失败的运行。
 
-The resolver returns the model's object unchanged. Unknown keys are *not*
-filtered: `extra="forbid"` on every input model means the tool refuses them, and
-filtering here would make the resolver a second, weaker authority.
+解析器原样返回模型给出的对象。未知键*不*会被过滤：每个输入模型上的
+`extra="forbid"` 意味着工具会拒绝它们，而在此处过滤会让解析器成为第二个、更弱的
+权威。
 
-## Assembly (`apps/api/service.py`)
+## 装配 (`apps/api/service.py`)
 
 ```python
 self._delegate, llm_resolver = self._build_llm_collaborators(llm_client)
 self._resolver = resolver if resolver is not None else llm_resolver
 ```
 
-One settings pair (`llm`, `llm_model`) drives both collaborators. An explicitly
-injected `resolver` wins over the LLM one, because injection is the caller's own
-seam — the test suite relies on it.
+一组配置项（`llm`、`llm_model`）同时驱动这两个协作者。显式注入的 `resolver` 优先
+于 LLM 提供的那个，因为注入是调用方自己的接缝——测试套件依赖这一点。
 
-## No new persisted state
+## 无新增持久化状态
 
-Nothing about this phase reaches the database. The arguments the resolver
-produced already land in `StepTrace.arguments` and therefore in `agent_steps`,
-because the Runner records them exactly as it records an injected resolver's.
+本阶段的任何内容都不会进入数据库。解析器产出的参数已经落在 `StepTrace.arguments`
+中，因而也落在 `agent_steps` 中，因为执行循环（Runner）记录它们的方式与记录注入式
+解析器的参数完全相同。

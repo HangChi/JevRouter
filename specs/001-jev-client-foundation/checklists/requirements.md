@@ -1,35 +1,35 @@
-# Specification Quality Checklist: Jev Client Foundation
+# 规格质量检查清单：Jev 客户端基础
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-23
-**Feature**: [spec.md](../spec.md)
+**用途**：在进入规划之前校验规格的完整性与质量
+**创建日期**：2026-09-23
+**特性**：[spec.md](../spec.md)
 
-## Content Quality
+## 内容质量
 
-- [ ] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [ ] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [ ] 不含实现细节（语言、框架、API）
+- [x] 聚焦于用户价值与业务需求
+- [ ] 面向非技术干系人撰写
+- [x] 所有必填章节均已完成
 
-## Requirement Completeness
+## 需求完整性
 
-- [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [ ] Success criteria are measurable
-- [ ] Success criteria are technology-agnostic (no implementation details)
-- [x] All acceptance scenarios are defined
-- [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
+- [x] 不再残留 [NEEDS CLARIFICATION] 标记
+- [x] 需求可测试且无歧义
+- [ ] 成功标准可度量
+- [ ] 成功标准与技术无关（不含实现细节）
+- [x] 所有验收场景均已定义
+- [x] 已识别边界情况
+- [x] 范围界定清晰
+- [x] 已识别依赖与假设
 
-## Feature Readiness
+## 特性就绪度
 
-- [ ] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
-- [ ] Feature meets measurable outcomes defined in Success Criteria
-- [ ] No implementation details leak into specification
+- [ ] 所有功能需求都有清晰的验收标准
+- [x] 用户场景覆盖主要流程
+- [ ] 特性满足成功标准中定义的可度量结果
+- [ ] 没有实现细节渗入规格
 
-## Notes
+## 备注
 
-- Model discovery is explicitly outside this feature's scope; all remaining requirements concern `/v1/systemone`.
-- Remaining failures reflect engineering-oriented requirements and implementation-focused success criteria. They are retained because this feature specifies a reusable service client; avoid presenting the checklist as fully passed.
+- 模型发现被明确排除在本特性范围之外；其余所有需求都针对 `/v1/systemone`。
+- 剩余未通过项反映了面向工程的需求以及偏重实现的成功标准。之所以保留它们，是因为本特性规定的是一个可复用的服务客户端；不要把这个检查清单呈现为已全部通过。

@@ -1,8 +1,8 @@
-# Implementation Plan: LLM Argument Synthesis
+# 实施计划：LLM 参数合成
 
-## Design Decisions
+## 设计决策
 
-### 1. The Tool protocol gains the model it already validates against
+### 1. Tool 协议获得它本就据以校验的模型
 
 ```python
 class Tool(Protocol):
@@ -14,47 +14,42 @@ class Tool(Protocol):
     def execute(self, input: dict[str, Any]) -> ToolResult: ...
 ```
 
-A tool that cannot describe its input cannot be driven by a model, and the only
-honest description is the one validation already uses. Deriving the prompt from
-`input_model.model_json_schema()` makes it impossible for the prompt to advertise
-a field the tool would refuse — the drift this avoids is the dangerous kind,
-because it would look like a working call.
+一个无法描述自身输入的工具无法被模型驱动，而唯一诚实的描述就是校验时已经在用的
+那一个。让提示词从 `input_model.model_json_schema()` 派生，就使提示词不可能宣称
+某个工具会拒绝的字段——这里所避免的漂移属于危险的那一类，因为它看起来会像一次
+成功的调用。
 
-The five tools each declare the model they already import. Three test stubs gain
-a one-line model. `web_search` and `knowledge_search` share `SearchInput`, which
-already lives in `knowledge_search.py`.
+五个工具各自声明它们本就导入的模型。三个测试桩新增一行模型声明。`web_search` 与
+`knowledge_search` 共用 `SearchInput`，后者已经在 `knowledge_search.py` 中。
 
-### 2. Field descriptions, not bare types
+### 2. 字段描述，而非裸类型
 
-The generated schemas say `{"expression": {"type": "string", "maxLength": 256}}`
-— enough to guess a name, not enough to produce a *correct* value. `write_file`'s
-path must be relative to the workspace root; that rule lives in the tool's body,
-so without prose in the schema the model would emit absolute paths and every
-write would fail. Adding `Field(description=...)` to the four input models puts
-the constraint next to the code that enforces it, and the schema renderer picks
-it up for free.
+生成的 schema 写的是 `{"expression": {"type": "string", "maxLength": 256}}`
+——足以猜出字段名，但不足以产出一个*正确*的值。`write_file` 的路径必须相对于
+工作区根目录；这条规则存在于工具的实现体内，因此如果 schema 中没有散文说明，
+模型就会输出绝对路径，每次写入都会失败。给四个输入模型加上
+`Field(description=...)`，就把该约束放在强制执行它的代码旁边，而 schema 渲染器
+会顺带取用。
 
-### 3. One module for the LLM-backed collaborators
+### 3. 用一个模块承载基于 LLM 的协作者
 
-`apps/api/llm.py` holds both `LLMArgumentResolver` and the `LLMDelegate` phase 11
-left in `service.py`. They are the same shape — one injected client, one model,
-one prompt builder, one error taxonomy — and keeping them apart would duplicate
-the failure handling. `service.py` keeps owning assembly and the run registry.
+`apps/api/llm.py` 同时承载 `LLMArgumentResolver` 和第 11 阶段留在 `service.py`
+中的 `LLMDelegate`。它们形态相同——一个注入的客户端、一个模型、一个提示词构建器、
+一套错误分类——把它们分开会导致失败处理重复。`service.py` 继续负责装配与运行
+注册表。
 
-### 4. Failure is loud, and lands where the Runner already puts it
+### 4. 失败要显式，并落在执行循环（Runner）本来就放置它的地方
 
-The resolver raises `ValueError` carrying the provider category or the parse
-problem. `Runner.run()` lets it escape (only `_Stop` and `JevClientError` are
-handled inside), and `TaskService._drive`'s existing catch-all turns it into a
-failed run with the message in the diagnostic. That is the same path phase 11's
-delegate uses, and it is deliberate: a synthesis that silently produced `{}`
-would execute a tool with no arguments, which is worse than a stopped run.
+解析器抛出携带 provider 类别或解析问题的 `ValueError`。`Runner.run()` 让它向外
+逃逸（内部只处理 `_Stop` 与 `JevClientError`），而 `TaskService._drive` 既有的
+兜底捕获会把它变成一次失败的运行，并把消息放入诊断信息。这与第 11 阶段委托所用的
+路径相同，而且是刻意的：一次静默产出 `{}` 的合成会以无参数执行工具，那比停止运行
+更糟。
 
-The resolver returns the model's object unchanged — no filtering, no defaults.
-The tool's pydantic model is the authority, so a violating argument fails exactly
-as a hand-written one would.
+解析器原样返回模型给出的对象——不过滤、不补默认值。工具的 pydantic 模型才是权威，
+因此违规的参数失败的情形与手写参数完全一致。
 
-### 5. Prompt shape
+### 5. 提示词形态
 
 ```text
 Goal: ...
@@ -75,11 +70,11 @@ Arguments (respond with one JSON object using exactly these keys):
 Respond with exactly one JSON object and nothing else.
 ```
 
-The schema renderer emits one line per field with type, required/optional,
-constraints that affect validity (min/max length, min/max value, default) and the
-description. Titles and `additionalProperties` are dropped as noise.
+schema 渲染器为每个字段输出一行，包含类型、必填/可选、影响有效性的约束（最小/最大
+长度、最小/最大值、默认值）以及描述。标题与 `additionalProperties` 作为噪声被
+丢弃。
 
-## File Layout
+## 文件布局
 
 ```text
 jev_router/tools/base.py                 + input_model on the protocol
@@ -93,27 +88,21 @@ tests/test_router.py, test_policy.py,
 tests/test_api.py                        end-to-end run with a real tool
 ```
 
-## Testing Strategy
+## 测试策略
 
-- Resolver unit tests with a stub completer: the prompt carries every required
-  element; bare and fenced JSON parse; a non-object, a missing key and an
-  unknown key each raise; a provider error carries its category.
-- Schema renderer tests: required/optional, defaults, length and range
-  constraints, and a description reaching the line.
-- API tests: a run that routes to `calculator` and executes with synthesized
-  arguments (traces show the model's arguments and the tool's real output); a
-  synthesis failure producing a failed run with a diagnostic; an unconfigured
-  service behaving exactly as before.
-- Tool tests: the five tools still validate identically, and each declares the
-  model its `execute` validates against.
+- 解析器单元测试，使用桩化补全器：提示词携带每一个必需元素；裸 JSON 与围栏 JSON
+  都能解析；非对象、缺失键和未知键各自抛出异常；provider 错误携带其类别。
+- schema 渲染器测试：必填/可选、默认值、长度与范围约束，以及描述能到达该行。
+- API 测试：一次路由到 `calculator` 并用合成参数执行的运行（trace 显示模型的参数
+  与工具的真实输出）；合成失败产生带诊断信息的失败运行；未配置的服务行为与之前
+  完全一致。
+- 工具测试：五个工具的校验行为保持不变，且各自声明其 `execute` 据以校验的模型。
 
-## Risks
+## 风险
 
-- **Protocol churn**: adding a required member touches every tool and stub.
-  Bounded and mechanical; a test asserts every registered tool declares a model
-  whose fields the tool actually accepts.
-- **Prompt size**: history is clipped as the delegate's is, so a long run cannot
-  grow the prompt without bound.
-- **Model output quality**: the model may produce arguments the tool rejects.
-  That is the designed failure — the run stops with the tool's own message, and
-  the trace shows what was attempted.
+- **协议变动**：新增一个必需成员会触及每个工具与测试桩。影响有界且机械；有一个
+  测试断言每个已注册工具都声明了一个其字段确实被该工具接受的模型。
+- **提示词体积**：历史会像委托那样被裁剪，因此一次长时间运行不会无限制地撑大
+  提示词。
+- **模型输出质量**：模型可能产出工具会拒绝的参数。这正是设计中的失败——运行以
+  工具自己的消息停止，trace 显示曾尝试了什么。

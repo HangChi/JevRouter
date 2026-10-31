@@ -1,48 +1,48 @@
-# Feature Specification: Tool Registry and MVP Tools
+# 功能规格：工具注册表与 MVP 工具
 
-**Feature Branch**: `002-tool-registry`
-**Status**: Complete
+**功能分支**：`002-tool-registry`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Provide application developers a typed, offline-testable registry for a trusted set of tools and the five initial JevRouter tools, without implementing routing or policy orchestration.
+为应用开发者提供一个面向可信工具集合的、类型化且可离线测试的注册表，以及五个初始 JevRouter 工具，但不实现路由或策略编排。
 
-## User Stories
+## 用户故事
 
-### US1 - Register and execute trusted tools
+### US1 - 注册并执行可信工具
 
-As an application developer, I need to register a finite set of tools with declared risk and call them by name so that routing can later select from an application-controlled allowlist.
+作为应用开发者，我需要注册一小组有限且已声明风险的工具，并能按名称调用它们，以便后续路由可以在一份由应用掌控的允许列表中进行选择。
 
-Acceptance scenarios:
-1. Registering distinct named tools permits lookup and execution; duplicate or unknown names fail clearly.
-2. Tool results carry the originating tool name and structured output.
-3. Every tool declares `read`, `write`, or `external` risk; the registry itself does not treat model output as authorization.
+验收场景：
+1. 注册名称互不相同的工具之后可以查找和执行；重复或未知的名称会清晰失败。
+2. 工具结果携带来源工具的名称和结构化输出。
+3. 每个工具都声明 `read`、`write` 或 `external` 风险；注册表本身不把模型输出视为授权。
 
-### US2 - Use offline MVP tools safely
+### US2 - 安全地使用离线 MVP 工具
 
-As an application developer, I need deterministic calculator, search, file-write, and mock-email tools so that the router can be developed without live external services.
+作为应用开发者，我需要确定性的计算器、搜索、文件写入和模拟邮件工具，以便路由层可以在不依赖真实外部服务的情况下开发。
 
-Acceptance scenarios:
-1. Calculator evaluates supported arithmetic and rejects names, calls, unsupported syntax, and excessive expressions.
-2. Search tools only query injected local documents/fixtures and bound input and output sizes.
-3. File writing stays within a configured root, rejects traversal and symlink escape, enforces a byte limit, and denies overwrites by default.
-4. Mock email validates required fields and returns a local simulation without sending a message.
+验收场景：
+1. 计算器能求值受支持的算术运算，并拒绝名称、函数调用、不支持的语法和超长表达式。
+2. 搜索工具只查询注入的本地文档／夹具，并对输入和输出大小设限。
+3. 文件写入被限制在配置的根目录之内，拒绝路径穿越和符号链接逃逸，强制执行字节上限，并默认禁止覆盖。
+4. 模拟邮件校验必需字段，并返回本地模拟结果而不发送任何消息。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide a typed tool contract with name, description, risk, and synchronous execution input/result.
-- **FR-002**: Registry registration is trusted application configuration and rejects duplicate/invalid names.
-- **FR-003**: Implement `calculator`, `knowledge_search`, `web_search`, `write_file`, and `send_mock_email`.
-- **FR-004**: Calculator MUST use a strict arithmetic AST allowlist; it MUST NOT evaluate arbitrary Python code.
-- **FR-005**: Search tools MUST use injected fixtures/data and MUST NOT perform network access.
-- **FR-006**: File writes MUST enforce a configured root, relative paths, size limits, symlink containment, and no-overwrite-by-default behavior.
-- **FR-007**: Mock email MUST NOT send network requests or connect to email services.
-- **FR-008**: Tests MUST be deterministic, offline, and cover success and boundary/error cases.
-- **FR-009**: Router, policy, runner, verifier, API, dashboard, persistence, and live service integrations are out of scope.
+- **FR-001**：提供带名称、描述、风险和同步执行输入／结果的类型化工具契约。
+- **FR-002**：注册表的注册属于可信的应用配置，并拒绝重复／非法名称。
+- **FR-003**：实现 `calculator`、`knowledge_search`、`web_search`、`write_file` 和 `send_mock_email`。
+- **FR-004**：计算器必须使用严格的算术 AST 允许列表；不得求值任意 Python 代码。
+- **FR-005**：搜索工具必须使用注入的夹具／数据，且不得进行网络访问。
+- **FR-006**：文件写入必须强制实施配置的根目录、相对路径、大小限制、符号链接包含，以及默认不覆盖的行为。
+- **FR-007**：模拟邮件不得发送网络请求或连接邮件服务。
+- **FR-008**：测试必须是确定性的、离线的，并覆盖成功以及边界／错误用例。
+- **FR-009**：路由层、策略、执行循环（Runner）、验证器、API、仪表盘、持久化以及真实服务集成不在范围内。
 
-## Success Criteria
+## 成功标准
 
-- All five tools are constructible and return structured `ToolResult` values.
-- Registry tests demonstrate trusted registration, duplicate rejection, and unknown tool handling.
-- Safety boundary tests pass for calculator, search, file writing, and mock email.
-- Complete test, lint, and static type suites pass without network access.
+- 全部五个工具都可被构造，并返回结构化的 `ToolResult` 值。
+- 注册表测试能够证明可信注册、重复拒绝以及未知工具处理。
+- 计算器、搜索、文件写入和模拟邮件的安全边界测试通过。
+- 完整的测试、lint 和静态类型检查套件在无网络访问的情况下通过。

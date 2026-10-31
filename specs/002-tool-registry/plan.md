@@ -1,31 +1,31 @@
-# Implementation Plan: Tool Registry and MVP Tools
+# 实现计划：工具注册表与 MVP 工具
 
-## Summary
+## 摘要
 
-Deliver a small synchronous tool layer with typed result/risk contracts, a trusted in-memory registry, and five bounded offline MVP tools. The phase does not implement routing or authorization policy.
+交付一个小的同步工具层，包含类型化的结果／风险契约、一个可信的内存注册表，以及五个有边界的离线 MVP 工具。本阶段不实现路由或授权策略。
 
-## Technical Context
+## 技术背景
 
-- Python package: `jev_router.tools`.
-- Validation: Pydantic v2 at tool input boundaries.
-- Registry: in-memory, application-configured, duplicate names rejected.
-- Testing: pytest with deterministic fixtures and temporary directories; no network access.
-- Static checks: Ruff and strict mypy.
+- Python 包：`jev_router.tools`。
+- 校验：在工具输入边界处使用 Pydantic v2。
+- 注册表：内存中，由应用配置，重复名称被拒绝。
+- 测试：pytest，配合确定性的夹具和临时目录；无网络访问。
+- 静态检查：Ruff 与严格模式的 mypy。
 
-## Design
+## 设计
 
-`Tool` is a protocol with `name`, `description`, a `RiskLevel`, and synchronous `execute(input) -> ToolResult`. `ToolRegistry` owns only trusted registrations, lookup, and dispatch. Each tool validates its input and owns its local behavior. Search and web-search fixtures are injected. Calculator accepts only a bounded arithmetic AST. File writing resolves a relative target beneath a configured root and rejects symlink escape, excessive UTF-8 content, and overwrites by default. Mock email validates metadata and returns a simulation.
+`Tool` 是一个协议，具有 `name`、`description`、一个 `RiskLevel`，以及同步的 `execute(input) -> ToolResult`。`ToolRegistry` 只负责可信的注册、查找和派发。每个工具自行校验其输入并负责其本地行为。搜索与网页搜索的夹具通过注入提供。计算器只接受有边界的算术 AST。文件写入在配置的根目录下解析相对目标路径，并默认拒绝符号链接逃逸、超长的 UTF-8 内容和覆盖。模拟邮件校验元数据并返回一次模拟。
 
-## Non-Goals
+## 非目标
 
-- Model-driven registration or authority decisions.
-- Router, policy engine, runner, verifier, agent loop, API, dashboard, persistence, or live service integrations.
-- Arbitrary URL fetching, shell execution, real email, or calculator `eval`.
+- 由模型驱动的注册或权限决策。
+- 路由层、策略引擎、执行循环（Runner）、验证器、智能体循环、API、仪表盘、持久化或真实服务集成。
+- 任意 URL 抓取、shell 执行、真实邮件，或计算器的 `eval`。
 
-## Validation Strategy
+## 验证策略
 
-Run `uv run ruff check .`, `uv run mypy jev_router`, and `uv run pytest`. Tests cover registered tool dispatch, duplicate/unknown names, calculator syntax and limits, injected search data, file boundaries and overwrite controls, and mock email validation/simulation. All tests must remain offline.
+运行 `uv run ruff check .`、`uv run mypy jev_router` 和 `uv run pytest`。测试覆盖已注册工具的派发、重复／未知名称、计算器语法与限制、注入的搜索数据、文件边界与覆盖控制，以及模拟邮件的校验／模拟。所有测试都必须保持离线。
 
-## Operational Constraint
+## 运行约束
 
-File containment assumes no hostile concurrent process can replace path components with symlinks between validation and file open; deployments must protect the configured root accordingly.
+文件包含性的成立前提是：没有敌对的并发进程能在校验与打开文件之间用符号链接替换路径组件；部署时必须相应地保护配置的根目录。

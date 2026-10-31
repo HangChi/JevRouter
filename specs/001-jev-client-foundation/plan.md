@@ -1,45 +1,45 @@
-# Implementation Plan: Jev Client Foundation
+# 实现计划：Jev 客户端基础
 
-## Summary
+## 摘要
 
-Implement the reusable Python Jev client for the documented `POST /v1/systemone` contract, including the `noul`, `choice`, and `score` question types. Model discovery is outside this feature's scope.
+为文档所述的 `POST /v1/systemone` 契约实现可复用的 Python Jev 客户端，包括 `noul`、`choice` 和 `score` 问题类型。模型发现不在本特性范围内。
 
-## Goals
+## 目标
 
-- Provide typed request and response models for documented system-one decisions.
-- Use asynchronous HTTP with an injectable transport, finite timeouts, sanitized typed errors, and no automatic retry of decisions.
-- Validate outbound questions and inbound responses at the service boundary.
-- Enable fully offline tests without credentials or billable API calls.
-- Keep model discovery and all later V1 components outside this feature.
+- 为文档所述的 system-one 决策提供类型化的请求与响应模型。
+- 使用异步 HTTP，配合可注入的传输层、有限的超时、脱敏的类型化错误，并且不对决策做自动重试。
+- 在服务边界处校验出站问题与入站响应。
+- 使得无需凭据或计费 API 调用即可进行完全离线的测试。
+- 将模型发现以及所有后续的 V1 组件留在本特性之外。
 
-## Non-Goals
+## 非目标
 
-- Model discovery request/response implementation.
-- Tool registry, router, policy engine, agent loop, verifier, API, dashboard, persistence, or eval runner.
-- Live-service tests or automatic retries.
+- 模型发现请求／响应的实现。
+- 工具注册表、路由层、策略引擎、智能体循环、验证器、API、仪表盘、持久化或评测运行器。
+- 真实服务测试或自动重试。
 
-## Technical Context
+## 技术背景
 
-- Language: Python 3.9 compatible syntax.
-- HTTP: async HTTPX client with injectable transport.
-- Validation: Pydantic v2 models.
-- Tests: pytest and pytest-asyncio with mock HTTP transport.
-- Packaging/lock: `pyproject.toml` and `uv.lock`.
-- No model-discovery behavior is included in this feature; callers provide the model identifier.
+- 语言：兼容 Python 3.9 的语法。
+- HTTP：异步 HTTPX 客户端，传输层可注入。
+- 校验：Pydantic v2 模型。
+- 测试：pytest 与 pytest-asyncio，配合模拟 HTTP 传输。
+- 打包／锁定：`pyproject.toml` 与 `uv.lock`。
+- 本特性不包含任何模型发现行为；由调用方提供模型标识符。
 
-## Design
+## 设计
 
-The adapter in `jev_router/clients/jev.py` owns provider-specific serialization, response validation, and error conversion. The client receives a base URL, API key, and finite timeout configuration; its transport can be injected for offline tests. Typed domain structures represent question definitions and their union, and typed answer variants preserve only documented data. Secret values must never be included in errors or logs.
+`jev_router/clients/jev.py` 中的适配器负责提供方专属的序列化、响应校验和错误转换。客户端接收基础 URL、API 密钥以及有限的超时配置；其传输层可以被注入以便离线测试。类型化的领域结构表示问题定义及其联合类型，类型化的答案变体只保留文档所描述的数据。机密取值绝不能出现在错误或日志中。
 
-The system-one response contract is sourced from the TypeSafe HTTP API documentation: requests include `state`, `model`, and named `questions`; response `answers` are keyed by question ID, alongside `model` and `usage`. Noul carries a probability; Choice carries selection, probabilities, and confidence; Score carries score, legend, probabilities, and confidence. Validate constraints and consistency with the submitted question before returning answers.
+system-one 响应契约来源于 TypeSafe HTTP API 文档：请求包含 `state`、`model` 和具名的 `questions`；响应中的 `answers` 以问题 ID 为键，同时包含 `model` 和 `usage`。Noul 携带一个概率；Choice 携带所选项、概率和置信度；Score 携带分数、图例、概率和置信度。在返回答案之前，要校验约束条件以及与所提交问题的一致性。
 
-## Risks and Mitigations
+## 风险与缓解
 
-- Model discovery is outside this feature's scope; callers provide model names.
-- Provider responses may evolve: strict boundary validation returns a sanitized schema error rather than fabricating decisions.
-- Secret leakage through HTTP errors: do not embed raw response bodies, request headers, or underlying exception text in public error strings.
-- Pydantic v2 support is incompatible with system Python 3.9 only if dependency resolution selects a newer unsupported release; constrain supported versions and verify lock resolution.
+- 模型发现不在本特性范围内；由调用方提供模型名称。
+- 提供方响应可能演进：严格的边界校验会返回脱敏的 schema 错误，而不是捏造决策。
+- 机密可能通过 HTTP 错误泄露：不要在对外错误字符串中嵌入原始响应体、请求头或底层异常文本。
+- 只有当依赖解析选中了更新且不受支持的版本时，Pydantic v2 支持才与系统自带的 Python 3.9 不兼容；因此要约束受支持的版本，并验证锁定解析结果。
 
-## Validation Strategy
+## 验证策略
 
-Use mock transport tests to assert exact request shape, headers without exposing key values, typed parsing for all question types and mixed requests, request validation before I/O, HTTP/timeout/transport/JSON/schema failures, no retries, and secret redaction. Run formatting, static typing, and the complete offline test suite. Do not send a live request.
+使用模拟传输测试来断言确切的请求形态、不含密钥取值的请求头、对所有问题类型和混合请求的类型化解析、I/O 之前的请求校验、HTTP／超时／传输／JSON／schema 失败、不重试，以及机密脱敏。运行格式化、静态类型检查和完整的离线测试套件。不要发送真实请求。

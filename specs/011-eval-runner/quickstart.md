@@ -1,6 +1,6 @@
-# Quickstart: Eval Runner and LLM Baseline
+# 快速开始：评测执行循环（Runner）与 LLM 基线
 
-## Run the checks
+## 运行检查
 
 ```sh
 uv run ruff check .
@@ -8,9 +8,9 @@ uv run mypy jev_router apps evals
 uv run pytest
 ```
 
-## Run an eval against the real providers
+## 对真实 provider 运行一次评测
 
-Credentials come from the environment (`.env` is not loaded by the CLI):
+凭据来自环境变量（命令行不会加载 `.env`）：
 
 ```sh
 export JEV_API_KEY=...      # required for jev and compare
@@ -21,15 +21,15 @@ export LLM_MODEL=...        # required for llm and compare
 uv run python -m evals --mode compare --json-out /tmp/report.json
 ```
 
-Exit codes: `0` clean, `1` at least one case errored, `2` configuration or case-file problem. Missing credentials fail before any case runs.
+退出码：`0` 表示干净，`1` 表示至少有一个用例出错，`2` 表示配置或用例文件有问题。凭据缺失时会在任何用例运行之前失败。
 
-Other flags: `--cases PATH` (another versioned case file), `--limit N` (first N cases in file order), `--jev-model` / `--llm-model` (override the environment).
+其他参数：`--cases PATH`（另一个版本化用例文件）、`--limit N`（按文件顺序取前 N 个用例）、`--jev-model` / `--llm-model`（覆盖环境变量）。
 
-The report is `{"version": 1, "data": {...}}`; `data` is what phase 12's `POST /evals` accepts.
+报告格式为 `{"version": 1, "data": {...}}`；`data` 就是第 12 阶段 `POST /evals` 所接受的内容。
 
-## Run the eval offline (no credentials)
+## 离线运行评测（无需凭据）
 
-The library takes routers, so a run needs no provider:
+库接收的是路由层，因此一次运行不需要任何 provider：
 
 ```python
 import asyncio
@@ -50,9 +50,9 @@ report = asyncio.run(
 print(report.metrics.jev.expected_match_rate)
 ```
 
-`tests/test_eval_runner.py` drives exactly this shape with `httpx.MockTransport`.
+`tests/test_eval_runner.py` 正是用 `httpx.MockTransport` 驱动这一形态。
 
-## Try the LLM adapter
+## 试用 LLM 适配器
 
 ```python
 import asyncio
@@ -65,7 +65,7 @@ completion = asyncio.run(
 print(completion.text, completion.input_tokens, completion.output_tokens)
 ```
 
-## Enable delegation in the API
+## 在 API 中启用委托
 
 ```sh
 export JEV_API_KEY=... JEV_MODEL=...
@@ -73,11 +73,11 @@ export LLM_API_KEY=... LLM_MODEL=...     # optional; both or neither
 uv run uvicorn apps.api.app:create_app --factory
 ```
 
-With the LLM pair set, a route that the Policy Engine sends to `delegate_to_llm` is answered by the model and recorded as that step's result. Without it the run stops with `failed` and the diagnostic `delegation was requested but no handler is configured` — the phase-7 behaviour.
+在配置了这一对 LLM 变量后，被策略引擎送往 `delegate_to_llm` 的路由会由该模型回答，并记录为该步骤的结果。未配置时，运行会以 `failed` 停止，并给出诊断信息 `delegation was requested but no handler is configured`——即第 7 阶段的行为。
 
-## Verify against the real app
+## 对真实应用进行验证
 
-Boot the API with stubbed providers (a throwaway script under `/tmp`, not in the repo), then:
+用桩实现替换 provider 后启动 API（在 `/tmp` 下写一个临时脚本，不要放进仓库），然后：
 
 ```sh
 curl -s localhost:8000/tasks -H 'content-type: application/json' \
@@ -86,4 +86,4 @@ curl -s localhost:8000/tasks/<task_id>
 curl -s localhost:8000/tasks/<task_id>/traces
 ```
 
-Queue one route above the reasoning threshold and one below it; the first step reports `policy_outcome: delegate_to_llm` with the model's text as its result, and the second executes.
+分别排入一条高于推理阈值和一条低于该阈值的路由；第一步会报告 `policy_outcome: delegate_to_llm` 并以模型的文本作为其结果，第二步则正常执行。

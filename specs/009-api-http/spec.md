@@ -1,76 +1,76 @@
-# Feature Specification: API HTTP Boundary
+# 特性规格：API HTTP 边界
 
-**Feature Branch**: `009-api-http`
-**Status**: Complete
+**特性分支**：`009-api-http`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Expose the Runner and the trace store over HTTP so a client can start a task, watch it, answer a confirmation prompt, supply requested input, and read the resulting traces. The API layer adds no agent behaviour; it only carries requests and responses.
+通过 HTTP 暴露 Runner 与 trace 存储，使客户端能够启动任务、观察它、回应确认提示、提供被要求的输入，并读取最终产生的 trace。API 层不增加任何智能体行为；它只承载请求与响应。
 
-## User Stories
+## 用户故事
 
-### US1 - Start a task and watch it
+### US1 - 启动任务并观察它
 
-As a client developer, I need to submit a goal and poll its progress without holding a connection open.
+作为客户端开发者，我需要提交一个目标并轮询其进度，而不必保持一个连接常开。
 
-Acceptance scenarios:
-1. `POST /tasks` accepts a goal and returns `202` with a task id and initial status.
-2. `GET /tasks/{id}` reports the live or terminal status, step count, diagnostic and any pending prompt.
-3. `GET /tasks/{id}/traces` returns the traces written so far, including while the run is still going.
-4. An unknown task id returns `404` on every task-scoped route.
+验收场景：
+1. `POST /tasks` 接受一个目标，返回 `202` 以及任务 id 和初始状态。
+2. `GET /tasks/{id}` 报告实时或终态状态、步骤数、诊断信息与任何待处理的提示。
+3. `GET /tasks/{id}/traces` 返回目前已经写入的 trace，包括运行仍在进行时。
+4. 未知的任务 id 在每一个任务范围内的路由上都返回 `404`。
 
-### US2 - Answer a confirmation prompt
+### US2 - 回应确认提示
 
-As a client developer, I need to approve or deny a pending action with its resolved arguments visible.
+作为客户端开发者，我需要在能看到已解析参数的情况下批准或否决一个待处理的动作。
 
-Acceptance scenarios:
-1. A `write` or `external` risk action pauses the run in `awaiting_confirmation` and reports the action and arguments.
-2. `POST /tasks/{id}/confirm` with `approved: true` resumes the run and performs the action.
-3. `approved: false` stops the run at `needs_confirmation` with no side effect.
-4. Confirming a task that is not awaiting confirmation returns `409`.
+验收场景：
+1. 一个 `write` 或 `external` 风险的动作会让运行暂停在 `awaiting_confirmation`，并报告该动作与参数。
+2. 以 `approved: true` 调用 `POST /tasks/{id}/confirm` 会恢复运行并执行该动作。
+3. `approved: false` 会让运行停在 `needs_confirmation`，且不产生副作用。
+4. 对未处于等待确认状态的任务执行确认会返回 `409`。
 
-### US3 - Supply requested input
+### US3 - 提供被要求的输入
 
-As a client developer, I need to answer an `ask_user` prompt.
+作为客户端开发者，我需要回应一个 `ask_user` 提示。
 
-Acceptance scenarios:
-1. The run pauses in `awaiting_input` and reports the question.
-2. `POST /tasks/{id}/input` resumes the run with the supplied answer.
-3. Supplying input when nothing is pending returns `409`.
+验收场景：
+1. 运行会暂停在 `awaiting_input` 并报告该问题。
+2. `POST /tasks/{id}/input` 用所提供的答案恢复运行。
+3. 在没有待处理事项时提供输入会返回 `409`。
 
-### US4 - Trust the boundary
+### US4 - 信任这条边界
 
-As an operator, I need the API to reject malformed input and never disclose a credential.
+作为运维者，我需要 API 拒绝格式错误的输入，并且绝不泄露凭据。
 
-Acceptance scenarios:
-1. A blank or oversized goal, an unknown field, or a blank answer is rejected with `422`.
-2. No response body contains the provider credential.
-3. Configuration is validated at startup, so a misconfigured deployment refuses to serve.
+验收场景：
+1. 空白或过长的目标、未知字段或空白答案会以 `422` 被拒绝。
+2. 任何响应体都不包含供应商凭据。
+3. 配置在启动时被校验，因此配置错误的部署会拒绝提供服务。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide `POST /tasks`, `GET /tasks`, `GET /tasks/{id}`, `GET /tasks/{id}/traces`, `POST /tasks/{id}/confirm` and `POST /tasks/{id}/input`.
-- **FR-002**: Run each task as a background coroutine; requests never block on a run.
-- **FR-003**: Resolve confirmation and user input through futures so a run survives across requests.
-- **FR-004**: Report a live status (`running`, `awaiting_confirmation`, `awaiting_input`) distinct from the terminal `RunStatus`.
-- **FR-005**: Validate every request body with a strict schema and reject unknown fields.
-- **FR-006**: Map unknown tasks to `404`, a wrong-phase prompt to `409`, and invalid bodies to `422`.
-- **FR-007**: Validate all configuration at startup and refuse to serve when it is invalid.
-- **FR-008**: Never return the provider credential in any response.
-- **FR-009**: Leave the core package untouched; the API layer only consumes `Runner`, `TraceStore` and the typed decisions.
-- **FR-010**: Offline tests cover every endpoint, every error mapping, the confirmation and input flows, and the credential guarantee.
+- **FR-001**：提供 `POST /tasks`、`GET /tasks`、`GET /tasks/{id}`、`GET /tasks/{id}/traces`、`POST /tasks/{id}/confirm` 与 `POST /tasks/{id}/input`。
+- **FR-002**：把每个任务作为后台协程运行；请求永远不会阻塞在某次运行上。
+- **FR-003**：通过 future 来处理确认与用户输入，使一次运行可以跨越多个请求存活。
+- **FR-004**：报告一个与终态 `RunStatus` 相区别的实时状态（`running`、`awaiting_confirmation`、`awaiting_input`）。
+- **FR-005**：用严格的模式校验每个请求体，并拒绝未知字段。
+- **FR-006**：把未知任务映射为 `404`，把处于错误阶段的提示映射为 `409`，把无效的请求体映射为 `422`。
+- **FR-007**：在启动时校验所有配置，配置无效时拒绝提供服务。
+- **FR-008**：绝不在任何响应中返回供应商凭据。
+- **FR-009**：保持核心包不变；API 层只消费 `Runner`、`TraceStore` 与带类型的决策。
+- **FR-010**：离线测试覆盖每个端点、每种错误映射、确认与输入流程，以及凭据保证。
 
-## Success Criteria
+## 成功标准
 
-- A submitted task reaches a terminal status without any request blocking on it.
-- A confirmation prompt carries the resolved arguments and resumes on approval.
-- No credential appears in any response body.
-- Ruff, strict mypy and the full offline test suite pass, and the app boots under uvicorn.
+- 提交的任务能够达到终态状态，且没有任何请求阻塞在它上面。
+- 确认提示携带已解析的参数，并在批准后恢复运行。
+- 任何响应体中都不出现凭据。
+- Ruff、严格 mypy 与完整的离线测试套件全部通过，且应用能在 uvicorn 下启动。
 
-## Non-Goals
+## 非目标
 
-- Authentication, authorization, rate limiting or multi-tenancy.
-- The Web dashboard, streaming or server-sent events.
-- Task cancellation, retry or resumption after a process restart.
-- Migrating in-flight runs when a store is replaced.
-- Changing the core package's contracts.
+- 认证、授权、限流或多租户。
+- Web 看板、流式输出或服务器推送事件。
+- 任务取消、重试或进程重启后的恢复。
+- 存储被替换时迁移在途的运行。
+- 改动核心包的契约。

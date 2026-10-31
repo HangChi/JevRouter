@@ -1,24 +1,24 @@
-# Tasks: Task State and Budget
+# 任务：任务状态与预算
 
-## Phase 1: State Contract
+## 阶段 1：状态契约
 
-- [x] T001 Define immutable step records and task state with JSON snapshot isolation in `jev_router/state.py`.
-- [x] T002 Implement validated state advancement and history updates.
-- [x] T003 Define immutable finite step/model-call budgets and consumption methods.
-- [x] T004 Export the public state and budget types from the package.
+- [x] T001 在 `jev_router/state.py` 中定义不可变的步骤记录与任务状态，并实现 JSON 快照隔离。
+- [x] T002 实现带校验的状态推进与历史更新。
+- [x] T003 定义不可变的有限步数与模型调用预算及其消耗方法。
+- [x] T004 从包中导出公开的状态与预算类型。
 
-## Phase 2: Tests and Documentation
+## 阶段 2：测试与文档
 
-- [x] T005 Test state initialization, transitions, input isolation, invalid values, and history consistency.
-- [x] T006 Test budget creation, zero limits, exact exhaustion, and immutable consumption.
-- [x] T007 Document scope, data model, and phase boundaries in this spec directory.
-- [x] T008 Update architecture and development documentation for state and budget ownership.
-- [x] T009 Run Ruff, strict mypy, and full offline pytest.
+- [x] T005 测试状态初始化、转换、输入隔离、非法值以及历史一致性。
+- [x] T006 测试预算创建、零上限、精确耗尽以及不可变消耗。
+- [x] T007 在本规格目录中记录范围、数据模型与阶段边界。
+- [x] T008 更新架构与开发文档，说明状态与预算的归属。
+- [x] T009 运行 Ruff、严格模式 mypy 以及完整的离线 pytest。
 
-## Dependencies
+## 依赖
 
-T001 precedes T002 and T005. T003 precedes T006. T004–T009 follow their relevant implementation.
+T001 先于 T002 与 T005。T003 先于 T006。T004–T009 在其相关实现之后进行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. State and budget operations are immutable, bounded, deterministic, and do not orchestrate external work.
+所有任务仅在实现与验证完成之后才会被勾选。状态与预算操作是不可变、有界、确定性的，且不编排外部工作。

@@ -1,47 +1,47 @@
-# Feature Specification: Jev Verifier
+# 功能规格：Jev 验证器
 
-**Feature Branch**: `006-verifier`
-**Status**: Complete
+**功能分支**：`006-verifier`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Evaluate whether the latest task result satisfies the user's goal using one typed Jev decision request. The verifier reports completion probability and result quality; it does not modify task state, route another action, or execute tools.
+使用一次类型化的 Jev 决策请求，评估最新的任务结果是否满足用户目标。验证器报告完成概率与结果质量；它不修改任务状态、不路由其他动作，也不执行工具。
 
-## User Stories
+## 用户故事
 
-### US1 - Assess task completion
+### US1 - 评估任务完成度
 
-As an application developer, I need a calibrated probability that the latest result satisfies the original goal so a future runner can decide whether to stop or continue.
+作为应用开发者，我需要一个经过校准的概率，表明最新结果是否满足原始目标，以便未来的执行循环能够决定停止还是继续。
 
-Acceptance scenarios:
-1. A valid task snapshot and latest step result produce a typed completion probability.
-2. The request includes the goal, action, result, and relevant context/history supplied in the state.
-3. Missing result or a task with no completed step is rejected before any provider request.
-4. Invalid or incomplete provider answers fail through the client's sanitized validation boundary.
+验收场景：
+1. 有效的任务快照与最新步骤结果会产生一个类型化的完成概率。
+2. 请求中包含目标、动作、结果，以及状态中提供的相关上下文/历史。
+3. 缺少结果或任务没有已完成的步骤时，会在发起任何提供商请求之前被拒绝。
+4. 提供商返回的无效或不完整答案会经由客户端已净化的校验边界失败。
 
-### US2 - Assess result quality
+### US2 - 评估结果质量
 
-As an application developer, I need a typed quality score and confidence alongside completion so the future runner can distinguish complete-but-poor results from useful results.
+作为应用开发者，我需要在完成度之外还有一个类型化的质量分与置信度，以便未来的执行循环能够区分「已完成但质量差」的结果与有用的结果。
 
-Acceptance scenarios:
-1. The quality score is associated with the ordered quality legend submitted in the request.
-2. Completion and quality are requested together in one provider call.
-3. The returned assessment is immutable and preserves the selected model identifier.
+验收场景：
+1. 质量分与请求中提交的有序质量图例相关联。
+2. 完成度与质量在一次提供商调用中一并请求。
+3. 返回的评估是不可变的，并保留所选的模型标识符。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide an asynchronous verifier over a `TaskState` and the injected `JevClient` and model identifier.
-- **FR-002**: Submit one `noul` completion question and one `score` quality question in a single `systemone` request.
-- **FR-003**: Include current goal, step/action, context, history, and latest result in the decision state.
-- **FR-004**: Return an immutable typed assessment with completion probability, quality score/confidence, and model.
-- **FR-005**: Reject state without a completed action/result before making provider I/O.
-- **FR-006**: Leave completion thresholds and the action taken afterward to the future Runner.
-- **FR-007**: Never mutate task state, execute tools, or loop.
-- **FR-008**: Offline tests cover request shape, typed mapping, invalid state, client failures, and no state/tool side effects.
+- **FR-001**：基于 `TaskState` 以及注入的 `JevClient` 与模型标识符，提供异步验证器。
+- **FR-002**：在单个 `systemone` 请求中提交一个 `noul` 完成度问题和一个 `score` 质量问题。
+- **FR-003**：在决策状态中包含当前目标、步/动作、上下文、历史与最新结果。
+- **FR-004**：返回不可变的类型化评估，包含完成概率、质量分/置信度以及模型。
+- **FR-005**：在进行提供商 I/O 之前，拒绝没有已完成动作/结果的状态。
+- **FR-006**：完成度阈值以及之后采取的动作留给未来的执行循环（Runner）。
+- **FR-007**：绝不修改任务状态、执行工具或循环。
+- **FR-008**：离线测试覆盖请求结构、类型化映射、非法状态、客户端失败，以及无状态/工具副作用。
 
-## Success Criteria
+## 成功标准
 
-- A valid verification makes exactly one client request with both questions.
-- Completion and quality values map from validated typed answers without reinterpretation.
-- Invalid state is rejected without a request.
-- Ruff, strict mypy, and the full offline test suite pass.
+- 一次有效的验证只发起一次客户端请求，并同时包含两个问题。
+- 完成度与质量值由已校验的类型化答案映射而来，不做重新解释。
+- 非法状态会被拒绝，且不发起请求。
+- Ruff、严格模式 mypy 以及完整离线测试套件通过。

@@ -1,4 +1,4 @@
-# Quickstart: Task State and Budget
+# 快速开始：任务状态与预算
 
 ```python
 from jev_router import ExecutionBudget, TaskState
@@ -11,6 +11,6 @@ state = state.advance(action="calculator", result={"value": 4})
 budget = budget.consume_step()
 ```
 
-Each operation returns a new immutable snapshot. Exhausted counters raise `ValueError`. This phase does not run a loop or invoke tools or models.
+每个操作都会返回一个新的不可变快照。已耗尽的计数器会抛出 `ValueError`。本阶段不运行循环，也不调用工具或模型。
 
-Run offline checks from the repository root with `uv run pytest tests/test_state.py` and the full project checks.
+在仓库根目录通过 `uv run pytest tests/test_state.py` 运行离线检查，并运行完整的项目检查。

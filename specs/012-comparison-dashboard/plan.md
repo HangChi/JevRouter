@@ -1,31 +1,31 @@
-# Implementation Plan: Comparison Dashboard
+# 实施计划：对比看板
 
-## Design Decisions
+## 设计决策
 
-### 1. Eval results live in the same store as traces
+### 1. 评测结果与 trace 存放在同一个存储层
 
-The store already owns versioned persistence, upsert idempotence and the "refuse what you cannot read" rule, so eval runs follow it rather than inventing a second storage mechanism. Two new tables:
+存储层已经具备版本化持久化、upsert 幂等性以及“读不懂的就拒绝”规则，因此评测运行遵循它，而不是另造一套存储机制。新增两张表：
 
 ```text
 eval_runs           one row per recorded run: run_id, mode, created_at, case_count, metrics payload
 eval_case_results   one row per (run_id, case_id, mode): the case outcome payload
 ```
 
-`SCHEMA_VERSION` moves 1 → 2. The bump is additive, and the store already refuses only *newer* databases, so an existing phase-8 database opens unchanged and gains the tables. Every JSON column keeps the `{"version": 1, "data": ...}` envelope and the same `_encode`/`_decode` pair, so a payload this build cannot read fails loudly instead of silently mis-reading a metric.
+`SCHEMA_VERSION` 从 1 升到 2。这次升级是增量的，而存储层本来就只拒绝*更新*的数据库，因此一个既有的第 8 阶段数据库可以原样打开并获得这两张新表。每个 JSON 列都保持 `{"version": 1, "data": ...}` 外层结构和同样的 `_encode`/`_decode` 配对，因此本次构建读不了的 payload 会显式报错，而不是静默地误读某个指标。
 
-### 2. The payload models are API-owned; the CLI imports them
+### 2. payload 模型由 API 拥有；命令行导入它们
 
-`apps/api/schemas.py` defines the strict request/response models (`RecordEvalRunRequest` and friends). `evals/cli.py` — the one module in `evals/` allowed to cross the layer boundary — imports them to build the `--api` POST body, which makes it impossible for the CLI to send a body the API would reject. The eval library itself (`cases`, `runner`, `metrics`, `llm_router`, `registry`) still imports nothing from `apps/`, keeping the dependency direction in `docs/development.md` intact.
+`apps/api/schemas.py` 定义严格的请求/响应模型（`RecordEvalRunRequest` 等）。`evals/cli.py`——`evals/` 中唯一被允许跨越层边界的模块——导入它们来构建 `--api` 的 POST 请求体，这使得命令行不可能发出一个会被 API 拒绝的请求体。评测库本身（`cases`、`runner`、`metrics`、`llm_router`、`registry`）仍然不从 `apps/` 导入任何内容，从而保持 `docs/development.md` 中规定的依赖方向不变。
 
-### 3. The web layer mirrors, as before
+### 3. Web 层照旧做镜像
 
-`src/lib/types.ts` hand-mirrors the new transport models, `src/lib/api.ts` gains `listEvalRuns`/`getEvalRun` with the same injectable-fetch and error mapping, and `src/lib/viewModel.ts` gains the pure functions that turn a run into cards and rows. Components stay layout-only. Absent metrics render as "—", matching the existing rule that `NULL` and a real `0` are different facts.
+`src/lib/types.ts` 手工镜像新的传输模型，`src/lib/api.ts` 新增 `listEvalRuns`/`getEvalRun`，沿用同样的可注入 fetch 与错误映射，`src/lib/viewModel.ts` 新增把一次运行转换成卡片与表格行的纯函数。组件只负责布局。缺失的指标渲染为“—”，与既有规则一致：`NULL` 与真实的 `0` 是不同的事实。
 
-### 4. Two pages, no new navigation machinery
+### 4. 两个页面，不引入新的导航机制
 
-`/evals` lists runs with the aggregate cards of each run's metrics; `/evals/[runId]` renders the per-case comparison table. The header gains one link. Polling is deliberately absent: an eval run is a finished record, not a live process.
+`/evals` 列出各次运行，并展示每次运行指标的聚合卡片；`/evals/[runId]` 渲染逐用例对比表。头部新增一个链接。刻意不做轮询：一次评测运行是一份已完成的记录，而不是一个进行中的进程。
 
-## File Layout
+## 文件布局
 
 ```text
 apps/api/storage.py      + eval_runs / eval_case_results, record/list/load, SCHEMA_VERSION 2
@@ -42,13 +42,13 @@ tests/test_api.py        + endpoint schema, 404/422 mapping, round-trip through 
 apps/web/src/lib/viewModel.test.ts, api.test.ts + eval coverage
 ```
 
-## Testing Strategy
+## 测试策略
 
-- Storage: temporary SQLite file, round-trip a recorded run, re-record the same id, refuse a tampered payload envelope.
-- API: `TestClient` with an injected store; assert status codes and that the served view equals what was posted.
-- Web: vitest over the new view-model functions and client methods with a stubbed fetch, then `tsc --noEmit`, lint and `next build`.
+- 存储：使用临时 SQLite 文件，对一次已记录运行做往返读写、重复记录同一个 id、拒绝被篡改的 payload 外层结构。
+- API：使用注入存储层的 `TestClient`；断言状态码，以及对外提供的视图与提交内容一致。
+- Web：用 vitest 配合桩化 fetch，覆盖新的视图模型函数与客户端方法，然后运行 `tsc --noEmit`、lint 与 `next build`。
 
-## Risks
+## 风险
 
-- **Schema version bump**: an older database must keep working. Mitigated by the additive change and covered by opening a version-1 database in a test.
-- **Report size**: 50 cases × two modes is a few hundred rows per run; listing stays bounded by `limit`, and the detail page loads one run only.
+- **schema 版本升级**：旧数据库必须继续可用。通过采用增量改动来缓解，并在测试中打开一个 version-1 数据库来覆盖。
+- **报告体积**：50 个用例 × 两种模式，每次运行有几百行；列表由 `limit` 限定范围，详情页只加载一次运行。

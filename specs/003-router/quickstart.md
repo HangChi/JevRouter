@@ -1,4 +1,4 @@
-# Quickstart: Decision Router
+# 快速开始：决策路由层
 
 ```python
 from jev_router import Router
@@ -13,9 +13,9 @@ decision = await router.route({"goal": "Calculate 2 + 2", "current_step": 0})
 print(decision.action, decision.confidence, decision.risk)
 ```
 
-The result is a recommendation only. Application policy must independently decide whether a selected action is permitted and whether confirmation is needed. The Router never executes tools.
+该结果只是一条建议。应用策略必须独立判定所选动作是否被允许、是否需要确认。路由层（Router）从不执行工具。
 
-Run offline checks from the repository root:
+在仓库根目录运行离线检查：
 
 ```sh
 uv run ruff check .

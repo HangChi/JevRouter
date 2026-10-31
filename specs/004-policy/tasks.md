@@ -1,22 +1,22 @@
-# Tasks: Policy Engine
+# 任务：策略引擎
 
-## Phase 1: Policy Contract
+## 阶段 1：策略契约
 
-- [x] T001 Define immutable policy decision and finite outcomes in `jev_router/policy.py`.
-- [x] T002 Implement control-action mapping, current-registry validation, and ordered threshold evaluation.
-- [x] T003 Export the public policy types from the package.
+- [x] T001 在 `jev_router/policy.py` 中定义不可变的策略决策与有限结果。
+- [x] T002 实现控制动作映射、当前注册表校验，以及按顺序进行的阈值求值。
+- [x] T003 从包中导出公开的策略类型。
 
-## Phase 2: Tests and Documentation
+## 阶段 2：测试与文档
 
-- [x] T004 Test each outcome, threshold boundaries, precedence, registry changes, and no execution in `tests/test_policy.py`.
-- [x] T005 Document scope, data model, MVP thresholds, and explicit-confirmation boundary in this spec directory.
-- [x] T006 Update architecture and development documentation for the Policy Engine.
-- [x] T007 Run Ruff, strict mypy, and full offline pytest; review the authority boundary.
+- [x] T004 在 `tests/test_policy.py` 中测试每种结果、阈值边界、优先级、注册表变化，以及不发生执行。
+- [x] T005 在本规格目录中记录范围、数据模型、MVP 阈值和显式确认边界。
+- [x] T006 更新架构与开发文档，说明策略引擎。
+- [x] T007 运行 Ruff、严格模式的 mypy 和完整离线 pytest；复核权威边界。
 
-## Dependencies
+## 依赖关系
 
-T001 precedes T002–T004. T006–T007 follow implementation and tests.
+T001 先于 T002–T004。T006–T007 在实现与测试之后执行。
 
-## Completion Criteria
+## 完成标准
 
-All tasks are checked only after implementation and validation. Policy selects a control outcome but never executes a tool or stands in for explicit user confirmation.
+所有任务仅在其实现与验证完成之后才会被勾选。策略选择一个控制结果，但绝不执行工具，也不代替用户的显式确认。

@@ -1,31 +1,31 @@
-# Research: Jev Client Foundation
+# 研究：Jev 客户端基础
 
-## Provider contract
+## 提供方契约
 
-- Decision: Implement only `POST /v1/systemone` using fields and response structures documented by TypeSafe; model discovery is outside this feature's scope.
-- Rationale: This feature is limited to the documented decision endpoint and its typed question/answer schemas.
-- Alternatives considered: Adding model discovery to this feature was rejected to keep its scope focused on decision requests.
+- 决策：只使用 TypeSafe 文档所述的字段和响应结构来实现 `POST /v1/systemone`；模型发现不在本特性范围内。
+- 理由：本特性限定于文档所述的决策端点及其类型化问题／答案 schema。
+- 已考虑的替代方案：曾考虑把模型发现加入本特性，但被否决，以使其范围聚焦于决策请求。
 
-## Decision request behavior
+## 决策请求行为
 
-- Decision: Require callers to provide a model identifier, submit all named questions in one request, use a finite timeout, and do not automatically retry decision requests.
-- Rationale: Matches the official endpoint contract and feature requirement to avoid unexpected billable duplicate decisions.
-- Alternatives considered: Automatic exponential retry based on provider guidance was rejected for the decision operation because the feature explicitly disallows default automatic retries.
+- 决策：要求调用方提供模型标识符，在单个请求中提交所有具名问题，使用有限的超时，并且不自动重试决策请求。
+- 理由：与官方端点契约以及本特性需求一致，以避免意外的、产生计费的重复决策。
+- 已考虑的替代方案：曾考虑依据提供方指引实现自动指数退避重试，但因本特性明确不允许默认自动重试，该方案对决策操作不被采纳。
 
-## Typed question and answer validation
+## 类型化问题与答案校验
 
-- Decision: Model `noul`, `choice`, and `score` as explicit request/response variants, validate question-specific criteria and answer fields at the HTTP boundary, and preserve provider probability/confidence data where documented.
-- Rationale: Downstream policy must consume structured, validated decisions rather than untrusted raw JSON.
-- Alternatives considered: Returning raw dictionaries was rejected because it shifts provider-schema validation into callers.
+- 决策：将 `noul`、`choice` 和 `score` 建模为显式的请求／响应变体，在 HTTP 边界处校验问题专属的 criteria 与答案字段，并在有文档说明之处保留提供方的概率／置信度数据。
+- 理由：下游策略必须消费结构化、经校验的决策，而不是不可信的原始 JSON。
+- 已考虑的替代方案：曾考虑返回原始字典，但被否决，因为那会把提供方 schema 的校验责任转移到调用方。
 
-## Transport and test strategy
+## 传输与测试策略
 
-- Decision: Use async HTTPX with an injectable transport and offline pytest coverage; do not perform live/billable calls in ordinary tests.
-- Rationale: Fits the repository's adapter boundary and allows deterministic request/response and failure tests.
-- Alternatives considered: Calling the live service for integration tests was rejected due to cost, secret handling, and contract uncertainty.
+- 决策：使用异步 HTTPX，配合可注入的传输层和离线 pytest 覆盖；常规测试中不进行真实／计费调用。
+- 理由：契合本仓库的适配器边界，并允许确定性的请求／响应与失败测试。
+- 已考虑的替代方案：曾考虑调用真实服务做集成测试，但因成本、机密处理以及契约不确定性而被否决。
 
-## Speckit setup
+## Speckit 配置
 
-- Decision: Maintain the requested feature artifacts manually under the existing feature directory; do not invoke setup scripts that are absent from this repository.
-- Rationale: There is no `.specify/` project directory or setup script, despite the installed skill's compatibility requirement.
-- Alternatives considered: Fabricating generated setup metadata was rejected.
+- 决策：在既有特性目录下手动维护所需的特性产物；不调用本仓库中并不存在的安装脚本。
+- 理由：尽管所安装的技能有其兼容性要求，但这里既没有 `.specify/` 项目目录，也没有安装脚本。
+- 已考虑的替代方案：曾考虑编造生成的安装元数据，但被否决。

@@ -1,46 +1,46 @@
-# Feature Specification: Decision Router
+# 功能规格：决策路由层
 
-**Feature Branch**: `003-router`
-**Status**: Complete
+**功能分支**：`003-router`
+**状态**：已完成
 
-## Goal
+## 目标
 
-Translate caller-supplied task state and trusted registered tools into one structured Jev routing recommendation. The Router does not authorize or execute the recommendation.
+把调用方提供的任务状态和可信的已注册工具，转换为一条结构化的 Jev 路由建议。路由层（Router）不授权也不执行该建议。
 
-## User Stories
+## 用户故事
 
-### US1 - Request a structured routing recommendation
+### US1 - 请求一条结构化的路由建议
 
-As an application developer, I need one typed decision covering the next action, risk, confirmation, and reasoning so that later local policy can decide what is allowed.
+作为应用开发者，我需要一个涵盖下一步动作、风险、确认和推理的类型化决策，以便后续的本地策略能够判定什么是被允许的。
 
-Acceptance scenarios:
-1. The Router sends exactly one Jev request with registered tools and the three control actions as choice candidates.
-2. The request includes the five ordered risk levels and confirmation/reasoning Noul questions.
-3. Validated Jev answers map into an internal typed decision; client failures propagate as typed errors.
-4. An empty registry still allows `ask_user`, `delegate_to_llm`, and `finish`.
+验收场景：
+1. 路由层只发送一个 Jev 请求，其中包含已注册工具以及三个控制动作作为 choice 候选。
+2. 请求包含五个有序的风险级别，以及 confirmation／reasoning 两个 Noul 问题。
+3. 经校验的 Jev 答案会映射为内部类型化决策；客户端失败会以类型化错误向外传播。
+4. 空注册表仍然允许 `ask_user`、`delegate_to_llm` 和 `finish`。
 
-### US2 - Preserve application authority
+### US2 - 保持应用方的权威
 
-As an application developer, I need a recommendation-only boundary so that model output cannot expand the allowlist or trigger side effects.
+作为应用开发者，我需要一个仅提供建议的边界，使模型输出无法扩大允许列表或触发副作用。
 
-Acceptance scenarios:
-1. Router never invokes a tool's `execute` method.
-2. Router candidates come only from trusted registry configuration and fixed control actions.
-3. Policy thresholds, authorization, and execution remain outside this phase.
+验收场景：
+1. 路由层从不调用工具的 `execute` 方法。
+2. 路由层的候选只来自可信的注册表配置和固定的控制动作。
+3. 策略阈值、授权和执行仍在本阶段之外。
 
-## Requirements
+## 需求
 
-- **FR-001**: Provide an async Router using the existing `JevClient.systemone` contract.
-- **FR-002**: Build one request with `next_action`, `risk`, `requires_confirmation`, and `needs_reasoning` questions.
-- **FR-003**: Include registry tool names/descriptions and `ask_user`, `delegate_to_llm`, `finish` as action candidates.
-- **FR-004**: Use the documented five risk descriptions in their specified order.
-- **FR-005**: Return a typed decision with selected action, action confidence, risk score/confidence, confirmation/reasoning probabilities, and model identifier.
-- **FR-006**: Router MUST NOT authorize, execute tools, or apply policy thresholds.
-- **FR-007**: Tests MUST be deterministic, offline, and cover request, mapping, empty-registry, and error behavior.
-- **FR-008**: Policy engine, thresholds, runner, verifier, API, dashboard, and persistence are out of scope.
+- **FR-001**：提供一个异步 Router，使用既有的 `JevClient.systemone` 契约。
+- **FR-002**：构造一个包含 `next_action`、`risk`、`requires_confirmation` 和 `needs_reasoning` 问题的请求。
+- **FR-003**：把注册表中工具的名称／描述以及 `ask_user`、`delegate_to_llm`、`finish` 作为动作候选纳入。
+- **FR-004**：按指定顺序使用文档所述的五个风险描述。
+- **FR-005**：返回一个类型化决策，包含所选动作、动作置信度、风险分数／置信度、确认／推理概率以及模型标识符。
+- **FR-006**：路由层不得授权、执行工具或应用策略阈值。
+- **FR-007**：测试必须是确定性的、离线的，并覆盖请求、映射、空注册表和错误行为。
+- **FR-008**：策略引擎、阈值、执行循环（Runner）、验证器、API、仪表盘和持久化不在范围内。
 
-## Success Criteria
+## 成功标准
 
-- Router request and response mapping tests pass using an injected mock transport.
-- Registered tools are candidates but are never executed by Router.
-- Ruff, strict mypy, and the complete offline test suite pass.
+- 使用注入的模拟传输，路由层的请求与响应映射测试通过。
+- 已注册工具是候选，但绝不会被路由层执行。
+- Ruff、严格模式的 mypy 以及完整的离线测试套件通过。

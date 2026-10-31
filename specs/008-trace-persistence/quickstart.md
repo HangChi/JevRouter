@@ -1,4 +1,4 @@
-# Quickstart: Trace Persistence
+# 快速开始：trace 持久化
 
 ```python
 import asyncio
@@ -99,6 +99,6 @@ async def main():
 asyncio.run(main())
 ```
 
-Pass `redact=` to scrub results, arguments and state snapshots before they are encoded. The store never sees `JevClientConfig`, so a credential cannot reach the database through it.
+传入 `redact=` 可以在编码之前清洗结果、参数与状态快照。存储永远不会看到 `JevClientConfig`，因此凭据无法经由它抵达数据库。
 
-Run offline checks with `uv run pytest tests/test_storage.py` and the full project checks.
+用 `uv run pytest tests/test_storage.py` 运行离线检查，并运行完整的项目检查。
