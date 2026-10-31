@@ -33,7 +33,10 @@ RISK_LEVELS: tuple[RiskDescription, ...] = (
 )
 
 CONTROL_ACTIONS: dict[str, str] = {
-    "ask_user": "More information is required",
+    "ask_user": (
+        "The goal is missing a detail only the user can supply, such as which "
+        "file, which recipient, or what format"
+    ),
     "delegate_to_llm": "The decision requires complex reasoning",
     "finish": "The task is already complete",
 }
@@ -92,13 +95,13 @@ class Router:
         confirmation_answer = response.answers["requires_confirmation"]
         reasoning_answer = response.answers["needs_reasoning"]
         if not isinstance(action_answer, ChoiceAnswer):
-            raise TypeError("next_action must be a choice answer")
+            raise TypeError("next_action 必须是 choice 类型的回答")
         if not isinstance(risk_answer, ScoreAnswer):
-            raise TypeError("risk must be a score answer")
+            raise TypeError("risk 必须是 score 类型的回答")
         if not isinstance(confirmation_answer, NoulAnswer):
-            raise TypeError("requires_confirmation must be a noul answer")
+            raise TypeError("requires_confirmation 必须是 noul 类型的回答")
         if not isinstance(reasoning_answer, NoulAnswer):
-            raise TypeError("needs_reasoning must be a noul answer")
+            raise TypeError("needs_reasoning 必须是 noul 类型的回答")
         return RouteDecision(
             action=action_answer.choice,
             confidence=action_answer.confidence,

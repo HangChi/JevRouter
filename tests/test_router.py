@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
 from jev_router.clients.jev import HttpError, JevClient, JevClientConfig
-from jev_router.router import RISK_LEVELS, RouteDecision, Router
+from jev_router.router import CONTROL_ACTIONS, RISK_LEVELS, RouteDecision, Router
 from jev_router.tools.base import ToolResult
 from jev_router.tools.registry import ToolRegistry
 
@@ -78,11 +78,11 @@ async def test_router_sends_one_request_and_returns_typed_decision() -> None:
 
     assert len(captured) == 1
     assert captured[0]["state"] == {"goal": "find a record"}
+    # 控制动作的说明取自 CONTROL_ACTIONS 本身，避免测试里再抄一份字符串——
+    # 抄一份的结果就是改提示词时测试跟着变红，而它本来不该关心具体措辞。
     assert captured[0]["questions"]["next_action"]["criteria"] == {
         "lookup": "Read a local record",
-        "ask_user": "More information is required",
-        "delegate_to_llm": "The decision requires complex reasoning",
-        "finish": "The task is already complete",
+        **CONTROL_ACTIONS,
     }
     assert captured[0]["questions"]["risk"]["criteria"] == list(RISK_LEVELS)
     assert set(captured[0]["questions"]) == {
@@ -121,11 +121,7 @@ async def test_router_with_empty_registry_offers_control_actions() -> None:
         JevClient(config(), httpx.MockTransport(handler)), "test-model", ToolRegistry()
     ).route("done")
 
-    assert captured["questions"]["next_action"]["criteria"] == {
-        "ask_user": "More information is required",
-        "delegate_to_llm": "The decision requires complex reasoning",
-        "finish": "The task is already complete",
-    }
+    assert captured["questions"]["next_action"]["criteria"] == dict(CONTROL_ACTIONS)
     assert decision.action == "finish"
 
 

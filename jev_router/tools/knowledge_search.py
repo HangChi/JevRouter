@@ -34,7 +34,15 @@ class SearchDocument(BaseModel):
 
 class KnowledgeSearchTool:
     name = "knowledge_search"
-    description = "Search an injected set of local knowledge documents."
+    # 描述的是「什么时候用它」，不是它的实现方式。早先的写法只说
+    # "injected set of local knowledge documents"，等于把实现细节当成能力说明，
+    # 模型无从判断「公司假期有几天」这类问题该落到这里，于是转向 ask_user。
+    description = (
+        "Search the organization's own knowledge base: documented policies, "
+        "procedures and reference facts. Use it when the goal asks about "
+        "something the organization has already written down, as opposed to "
+        "something to compute, to look up on the public web, or to create."
+    )
     risk: RiskLevel = "read"
     input_model: type[BaseModel] = SearchInput
 
@@ -45,7 +53,7 @@ class KnowledgeSearchTool:
         try:
             request = SearchInput.model_validate(input)
         except ValidationError as exc:
-            raise ValueError("invalid search input") from exc
+            raise ValueError("搜索输入无效") from exc
         terms = request.query.casefold().split()
         matches = [
             doc for doc in self._documents
