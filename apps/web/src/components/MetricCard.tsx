@@ -9,9 +9,8 @@ const TONE_BOX: Record<Tone, string> = {
 };
 
 /**
- * One aggregate number. The count that produced the rate is always shown under
- * it, because "88%" hides whether that is 44 of 50 or 4 of 5 — and a calibration
- * decision is made on the count, not the percentage.
+ * 一个汇总数字。产出该比率的计数始终显示在它下面，因为「88%」看不出那是 50 个
+ * 里的 44 个还是 5 个里的 4 个——而校准决策是依据计数、不是百分比做出的。
  */
 export function MetricCard({ card }: { card: import("@/lib/viewModel").MetricCard }) {
   return (

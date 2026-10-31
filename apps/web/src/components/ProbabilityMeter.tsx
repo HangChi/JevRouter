@@ -2,13 +2,11 @@ import type { ProbabilityMeter as Meter } from "@/lib/viewModel";
 import { formatProbability } from "@/lib/viewModel";
 
 /**
- * One 0–1 probability against its threshold.
+ * 一个 0–1 的概率与它阈值的对照。
  *
- * The fill carries severity: the accent hue while the signal is inside its
- * band, the warning hue once it has crossed into the side the Policy Engine
- * acts on. The track is a lighter step of the same ramp so the state reads
- * across the whole bar, and the value is always printed beside the mark — the
- * mark is never the only way to read the number.
+ * 填充色承载严重程度：信号还在自己的区间内时用强调色，一旦跨到策略引擎会据此
+ * 行动的那一侧就换成警告色。轨道是同色阶更浅的一档，让状态贯穿整条进度条；数值
+ * 始终印在刻度标记旁边——刻度标记从不是读取数字的唯一途径。
  */
 export function ProbabilityMeter({ meter }: { meter: Meter }) {
   const fill = meter.crossed ? "bg-warning" : "bg-accent";

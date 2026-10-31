@@ -6,8 +6,8 @@ import { SubmitForm } from "@/components/SubmitForm";
 import { TaskList } from "@/components/TaskList";
 
 export default async function Home() {
-  // The run list is the live state of another process, so rendering waits for a
-  // request rather than being baked into a static shell.
+  // 运行列表是另一个进程的实时状态，因此渲染要等到请求到来，而不是被固化进
+  // 一个静态骨架里。
   await connection();
 
   const result = await readFromApi(() => createApiClient().listTasks());

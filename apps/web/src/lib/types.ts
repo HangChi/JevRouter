@@ -1,17 +1,16 @@
 /**
- * Transport types for the JevRouter API.
+ * JevRouter API 的传输类型。
  *
- * This is a hand-written mirror of `apps/api/schemas.py`, not a generated
- * client. The API is the source of truth: when a field changes there, it has to
- * change here. Optionality matches the API — a field the store may return as
- * `NULL` is `| null` here, because an absent probability and a real `0.0` mean
- * different things and must not be rendered the same way.
+ * 这是 `apps/api/schemas.py` 的手写镜像，不是生成的客户端。API 才是唯一事实来源：
+ * 那边的字段一改，这里就必须跟着改。可空性也与 API 一致——存储可能返回 `NULL`
+ * 的字段，在这里就是 `| null`，因为「没有概率」和真实的 `0.0` 含义不同，不能
+ * 渲染成同一个样子。
  */
 
-/** A run that has not reached a terminal status yet. */
+/** 一个尚未进入终态的运行。 */
 export type LiveStatus = "running" | "awaiting_confirmation" | "awaiting_input";
 
-/** The terminal statuses the core package's `RunStatus` can report. */
+/** 核心包的 `RunStatus` 可能报告的终态。 */
 export type TerminalStatus =
   | "completed"
   | "needs_user_input"
@@ -21,8 +20,8 @@ export type TerminalStatus =
   | "failed";
 
 /**
- * Statuses are transported as plain strings, so an unrecognized value has to be
- * survivable rather than a type error at runtime.
+ * 状态以普通字符串传输，因此遇到无法识别的值时必须能存活下来，而不是在运行时
+ * 变成类型错误。
  */
 export type KnownStatus = LiveStatus | TerminalStatus;
 
@@ -35,6 +34,10 @@ export interface PendingConfirmationView {
   action: string;
   arguments: unknown;
   step: number;
+  /** 这次批准绑定在哪一份参数上；批准时必须原样回传。 */
+  digest: string;
+  /** 过期时间（ISO 8601）。过期后批准不再生效。 */
+  expires_at: string;
 }
 
 export interface PendingInputView {
@@ -64,10 +67,10 @@ export interface TaskListResponse {
 }
 
 /**
- * One completed step, flattened from the core package's `StepTrace`.
+ * 一个已完成的步骤，由核心包的 `StepTrace` 展平而来。
  *
- * `arguments`, `result` and `state_snapshot` are JSON of a shape this layer does
- * not model, so they stay `unknown` and are rendered through a JSON viewer.
+ * `arguments`、`result` 与 `state_snapshot` 是这一层并不建模的 JSON 形状，
+ * 因此保持 `unknown`，并通过 JSON 查看器渲染。
  */
 export interface TraceView {
   step: number;
@@ -94,11 +97,10 @@ export interface TraceListResponse {
 }
 
 /**
- * One case outcome from an eval run, mirrored from `apps/api/schemas.py`.
+ * 一次评测运行中的一个用例结果，镜像自 `apps/api/schemas.py`。
  *
- * The policy fields are `null` for the LLM baseline because it produces no
- * probabilities — an absent escalation and a real `false` are different facts
- * and must not render the same way.
+ * LLM 基线不产生概率，因此它的策略字段为 `null`——「没有升级」和真实的 `false`
+ * 是两个不同的事实，不能渲染成同一个样子。
  */
 export interface EvalCaseOutcome {
   case_id: string;
@@ -180,4 +182,26 @@ export interface EvalRunView {
   case_count: number;
   metrics: EvalComparisonMetrics;
   outcomes: EvalCaseOutcome[];
+}
+
+export interface PolicyThresholdView {
+  confirmation: number;
+  risk: number;
+  reasoning: number;
+  confidence: number;
+  completion: number;
+}
+
+export interface ToolPolicyView {
+  name: string;
+  risk: string;
+  description: string;
+  requires_confirmation: boolean;
+}
+
+export interface PolicyView {
+  thresholds: PolicyThresholdView;
+  tools: ToolPolicyView[];
+  confirmation_ttl_seconds: number;
+  confirmation_binding: string;
 }

@@ -7,8 +7,8 @@ import { submitTaskAction, type ActionResult } from "@/actions/tasks";
 const INITIAL: ActionResult = { ok: true };
 
 /**
- * Submitting a goal is the one write the home page owns. The API validates the
- * goal, so a rejection it reports is shown verbatim rather than re-worded here.
+ * 提交目标是首页拥有的唯一写入操作。目标由 API 校验，因此 API 报告的拒绝会原样
+ * 展示，而不在这里重新措辞。
  */
 export function SubmitForm() {
   const [state, formAction, pending] = useActionState(submitTaskAction, INITIAL);

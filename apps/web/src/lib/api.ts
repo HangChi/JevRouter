@@ -1,6 +1,7 @@
 import type {
   EvalRunListResponse,
   EvalRunView,
+  PolicyView,
   SubmitTaskResponse,
   TaskListResponse,
   TaskView,
@@ -8,17 +9,16 @@ import type {
 } from "./types";
 
 /**
- * Server-only client for the JevRouter API.
+ * 仅服务端使用的 JevRouter API 客户端。
  *
- * Every call happens on the server — in server components for reads and in
- * server actions for writes — so the browser never talks to `apps/api` and no
- * credential is configured here. The one piece of configuration is where the
- * API lives.
+ * 所有调用都在服务端发生——读取在服务端组件里，写入在服务端 action 里——因此
+ * 浏览器从不直接访问 `apps/api`，这里也不需要配置任何凭证。唯一的配置项是
+ * API 所在的位置。
  */
 
 export const DEFAULT_UPSTREAM = "http://127.0.0.1:8000";
 
-/** The API answered, but not with a success. */
+/** API 应答了，但不是一个成功应答。 */
 export class ApiError extends Error {
   readonly status: number;
 
@@ -29,7 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-/** The API could not be reached at all, which is a different problem. */
+/** API 完全无法连接，这是另一类问题。 */
 export class ApiUnavailableError extends Error {
   readonly upstream: string;
 
@@ -43,9 +43,8 @@ export class ApiUnavailableError extends Error {
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * The outcome of one read, with the two failure kinds kept apart: an unreachable
- * upstream is a misconfigured dashboard, while an error the API answered is a
- * fact about the run. They are reported differently.
+ * 一次读取的结果，两种失败被分开保存：上游不可达意味着仪表盘配置有误，而 API
+ * 应答的错误是关于这次运行本身的事实。两者的上报方式不同。
  */
 export type ReadResult<T> =
   | { ok: true; value: T }
@@ -70,24 +69,25 @@ export interface ApiClient {
   getTask(taskId: string): Promise<TaskView>;
   getTraces(taskId: string): Promise<TraceListResponse>;
   submitTask(goal: string, context?: Record<string, unknown>): Promise<SubmitTaskResponse>;
-  confirmTask(taskId: string, approved: boolean): Promise<void>;
+  confirmTask(taskId: string, approved: boolean, digest: string): Promise<void>;
   provideInput(taskId: string, answer: string): Promise<void>;
   listEvalRuns(limit?: number): Promise<EvalRunListResponse>;
   getEvalRun(runId: string): Promise<EvalRunView>;
+  getPolicy(): Promise<PolicyView>;
 }
 
 export interface ApiClientOptions {
   upstream?: string;
   fetchImpl?: FetchLike;
-  /** A hung upstream must not hang a server render, so requests are bounded. */
+  /** 上游卡住不能把服务端渲染也卡住，因此请求都有超时上限。 */
   timeoutMs?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Resolve the upstream from the environment, tolerating a missing variable and
- * a trailing slash so `API_UPSTREAM_URL=http://api:8000/` still joins cleanly.
+ * 从环境变量解析上游地址，同时容忍变量缺失和结尾斜杠，让
+ * `API_UPSTREAM_URL=http://api:8000/` 也能干净地拼接路径。
  */
 export function resolveUpstream(env: Record<string, string | undefined>): string {
   const raw = env.API_UPSTREAM_URL;
@@ -98,8 +98,8 @@ export function resolveUpstream(env: Record<string, string | undefined>): string
 }
 
 /**
- * Turn a FastAPI error body into one line. `HTTPException` carries a string
- * `detail`; request validation carries a list of `{ loc, msg }` entries.
+ * 把 FastAPI 的错误体压成一行。`HTTPException` 携带字符串 `detail`；请求校验
+ * 错误携带一个由 `{ loc, msg }` 条目组成的列表。
  */
 export function describeProblem(body: unknown): string {
   if (typeof body === "string" && body.trim() !== "") {
@@ -197,11 +197,11 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       });
     },
 
-    async confirmTask(taskId, approved) {
+    async confirmTask(taskId, approved, digest) {
       await request<void>(`/tasks/${encodeURIComponent(taskId)}/confirm`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ approved }),
+        body: JSON.stringify({ approved, digest }),
       });
     },
 
@@ -220,6 +220,10 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async getEvalRun(runId) {
       return request<EvalRunView>(`/evals/${encodeURIComponent(runId)}`);
+    },
+
+    async getPolicy() {
+      return request<PolicyView>("/policy");
     },
   };
 }

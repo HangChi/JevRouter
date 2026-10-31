@@ -16,8 +16,7 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("notFound");
   },
-  // LiveRefresh polls by refreshing the route; a static render only needs the
-  // hook to exist.
+  // LiveRefresh 通过刷新路由来轮询；静态渲染只需要这个 hook 存在即可。
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -109,6 +108,8 @@ describe("task page", () => {
           action: "send_mock_email",
           arguments: { to: "team@example.com", subject: "周报" },
           step: 0,
+          digest: "abcd1234",
+          expires_at: "2026-10-31T12:15:00+00:00",
         },
       }),
       [],

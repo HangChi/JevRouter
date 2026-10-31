@@ -129,8 +129,8 @@ describe("confirmTaskAction", () => {
     const confirmTask = vi.fn(async () => {});
     stub({ confirmTask });
 
-    await expect(confirmTaskAction("task-1", true)).resolves.toEqual({ ok: true });
-    expect(confirmTask).toHaveBeenCalledWith("task-1", true);
+    await expect(confirmTaskAction("task-1", true, "digest-1")).resolves.toEqual({ ok: true });
+    expect(confirmTask).toHaveBeenCalledWith("task-1", true, "digest-1");
     expect(revalidatePath).toHaveBeenCalledWith("/tasks/task-1");
   });
 
@@ -138,8 +138,8 @@ describe("confirmTaskAction", () => {
     const confirmTask = vi.fn(async () => {});
     stub({ confirmTask });
 
-    await expect(confirmTaskAction("task-1", false)).resolves.toEqual({ ok: true });
-    expect(confirmTask).toHaveBeenCalledWith("task-1", false);
+    await expect(confirmTaskAction("task-1", false, "digest-1")).resolves.toEqual({ ok: true });
+    expect(confirmTask).toHaveBeenCalledWith("task-1", false, "digest-1");
   });
 
   it("reports a 409, which means the run moved on without us", async () => {
@@ -148,7 +148,7 @@ describe("confirmTaskAction", () => {
     });
     stub({ confirmTask });
 
-    await expect(confirmTaskAction("task-1", true)).resolves.toEqual({
+    await expect(confirmTaskAction("task-1", true, "digest-1")).resolves.toEqual({
       ok: false,
       message: "the task is not awaiting confirmation",
     });
@@ -160,7 +160,7 @@ describe("confirmTaskAction", () => {
     });
     stub({ confirmTask });
 
-    await expect(confirmTaskAction("task-1", true)).resolves.toEqual({
+    await expect(confirmTaskAction("task-1", true, "digest-1")).resolves.toEqual({
       ok: false,
       message: "the request failed for a reason the API did not explain",
     });

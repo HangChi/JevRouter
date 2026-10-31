@@ -41,10 +41,9 @@ function SectionHeading({ children }: { children: string }) {
 }
 
 /**
- * One step's decision graph: the signals Jev returned, the control outcome the
- * Policy Engine chose from them, what the step then did, and what the Verifier
- * made of it. Every value shown is a field of the API's `TraceView` — nothing is
- * interpolated, and a field the API did not return renders as a dash.
+ * 一个步骤的决策图：Jev 返回的信号、策略引擎据此选出的控制结论、这一步随后做了
+ * 什么，以及验证器如何评价它。展示的每个值都是 API `TraceView` 的字段——没有任何
+ * 插值，API 没有返回的字段渲染为破折号。
  */
 export function StepCard({ trace }: { trace: TraceView }) {
   const meters = probabilityMeters(trace);

@@ -8,6 +8,15 @@ import { JsonBlock } from "./JsonBlock";
 
 const INITIAL: ActionResult = { ok: true };
 
+/** 把一个 ISO 时间显示成本地可读的时刻；解析不了就原样回显。 */
+function formatDeadline(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString("zh-CN", { hour12: false });
+}
+
 function InputPrompt({ taskId, question }: { taskId: string; question: string }) {
   const [state, formAction, pending] = useActionState(
     provideInputAction.bind(null, taskId),
@@ -48,17 +57,21 @@ function ConfirmationPrompt({
   taskId,
   action,
   args,
+  digest,
+  expiresAt,
 }: {
   taskId: string;
   action: string;
   args: unknown;
+  digest: string;
+  expiresAt: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
 
   const answer = (approved: boolean) => {
     startTransition(async () => {
-      const result = await confirmTaskAction(taskId, approved);
+      const result = await confirmTaskAction(taskId, approved, digest);
       setMessage(result.ok ? null : (result.message ?? "应答未被接受"));
     });
   };
@@ -69,6 +82,9 @@ function ConfirmationPrompt({
         运行即将执行 <span className="font-mono text-ink">{action}</span>，参数如下。
       </p>
       <JsonBlock label="待执行参数" value={args} defaultOpen />
+      <p className="text-xs text-muted">
+        这次批准只对上面这份参数有效，有效期至 {formatDeadline(expiresAt)}。
+      </p>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -97,9 +113,8 @@ function ConfirmationPrompt({
 }
 
 /**
- * The one thing only a human can do. The run is parked mid-step, so the prompt
- * carries the action and its resolved arguments: approving is approving exactly
- * what will run, not just the action's name.
+ * 只有人能做的这一件事。运行正停在步骤中间，因此提示里带着动作和它的实际参数：
+ * 批准就是批准即将执行的这份东西，而不只是动作的名字。
  */
 export function PendingPrompt({ task }: { task: TaskView }) {
   const confirmation = task.pending_confirmation;
@@ -109,6 +124,8 @@ export function PendingPrompt({ task }: { task: TaskView }) {
         taskId={task.task_id}
         action={confirmation.action}
         args={confirmation.arguments}
+        digest={confirmation.digest}
+        expiresAt={confirmation.expires_at}
       />
     );
   }

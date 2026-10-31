@@ -8,8 +8,8 @@ import { Notice } from "@/components/Notice";
 import { agreementCard, comparisonCardSets } from "@/lib/viewModel";
 
 export default async function EvalsPage() {
-  // The run list is another process's state, so rendering waits for a request
-  // rather than being baked into a static shell.
+  // 运行列表是另一个进程的状态，因此渲染要等到请求到来，而不是被固化进一个
+  // 静态骨架里。
   await connection();
 
   const result = await readFromApi(() => createApiClient().listEvalRuns());

@@ -30,7 +30,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
         </div>
       );
     }
-    // The API answered and does not know this task.
+    // API 应答了，但不认识这个任务。
     notFound();
   }
 
@@ -46,8 +46,8 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[taskId]">)
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <StatusBadge status={view.status} />
           <LiveRefresh active={live} />
-          {/* Counted from the traces this page renders: the handle's own step
-              counter is only recorded once the run finishes. */}
+          {/* 从本页渲染的 trace 中计数：句柄自己的步骤计数器要等运行结束后
+              才会被记录。 */}
           <span className="ml-auto font-mono text-xs tabular-nums text-ink-2">
             已记录 {steps.length} 步
           </span>

@@ -3,10 +3,10 @@ import Link from "next/link";
 import type { EvalRunSummary } from "@/lib/types";
 
 /**
- * The recorded eval runs, newest first, exactly as the API returns them.
+ * 已记录的评测运行，最新的在前，完全按 API 返回的样子展示。
  *
- * A run is a finished record rather than a live process, so there is nothing to
- * poll and no status to show: the mode and the case count say what the run was.
+ * 一次运行是一条已完成的记录而不是一个正在进行的进程，因此没有什么需要轮询，
+ * 也没有状态可显示：模式和用例数就说明了这次运行是什么。
  */
 export function EvalRunList({ runs }: { runs: EvalRunSummary[] }) {
   if (runs.length === 0) {

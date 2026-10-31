@@ -10,9 +10,8 @@ const TONE_DOT: Record<Tone, string> = {
 };
 
 /**
- * The run's steps in order, so the shape of a run is visible before any card is
- * read. Each node names its step, action and outcome; the branch is available on
- * hover and in full on the card itself.
+ * 运行的步骤按顺序排列，因此在读任何卡片之前就能看出一次运行的形状。每个节点
+ * 标出自己的步骤号、动作和结论；分支信息在悬停时可看，在卡片上则完整给出。
  */
 export function DecisionChain({ traces }: { traces: TraceView[] }) {
   const nodes = decisionChain(traces);

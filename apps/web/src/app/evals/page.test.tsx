@@ -145,7 +145,7 @@ describe("evals page", () => {
 
     expect(html).toContain("还没有记录过 eval 运行");
     expect(html).toContain("uv run python -m evals --mode compare");
-    // No run means no metrics section, only the list heading and its empty state.
+    // 没有运行就没有指标区块，只有列表标题和它的空状态。
     expect(html).not.toContain("一致率");
   });
 

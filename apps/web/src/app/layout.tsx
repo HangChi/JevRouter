@@ -13,7 +13,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   const upstream = resolveUpstream(process.env);
 
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body className="flex min-h-screen flex-col bg-page font-sans text-ink antialiased">
         <header className="border-b border-hairline bg-surface">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
@@ -27,6 +27,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </Link>
               <Link href="/evals" className="text-ink-2 transition-colors hover:text-ink">
                 评测
+              </Link>
+              <Link href="/policy" className="text-ink-2 transition-colors hover:text-ink">
+                策略
               </Link>
             </nav>
           </div>

@@ -10,20 +10,18 @@ import {
 import type { EvalComparisonMetrics, EvalModeMetrics, EvalCaseOutcome, TraceView } from "./types";
 
 /**
- * Pure view model over the API's transport types.
+ * API 传输类型之上的纯视图模型。
  *
- * Nothing here touches React, the network or the DOM: the components lay out
- * and style, and this module decides what a status means, which branch a step
- * took and whether a threshold was crossed. Keeping that split is what makes
- * the interesting logic testable without rendering anything.
+ * 这里不碰 React、网络或 DOM：组件负责布局与样式，而这个模块决定一个状态是什么
+ * 意思、一个步骤走了哪个分支、以及某个阈值是否被跨过。正是这条分界让真正有意思
+ * 的逻辑无需渲染任何东西就能被测试。
  */
 
 export type Tone = "neutral" | "live" | "blocked" | "good" | "bad";
 
 /**
- * Which branch a step took, derived from the outcome plus what actually
- * happened. `executed` wins over everything: an approved action that ran is an
- * executed action, however it got there.
+ * 一个步骤走的是哪个分支，由策略结论加上实际发生了什么推导出来。`executed`
+ * 优先级最高：一个被批准并执行了的动作就是已执行的动作，不管它是怎么走到那里的。
  */
 export type Branch =
   | "executed"
@@ -36,7 +34,7 @@ export type Branch =
   | "not_executed"
   | "unknown";
 
-/** Rendered wherever a field the API did not return would otherwise go. */
+/** API 没有返回某个字段时，就在该字段的位置渲染这个值。 */
 export const ABSENT = "—";
 
 const LIVE_STATUSES = new Set(["running", "awaiting_confirmation", "awaiting_input"]);
@@ -50,10 +48,9 @@ const GOOD_STATUSES = new Set(["completed"]);
 const BAD_STATUSES = new Set(["rejected", "budget_exhausted", "failed"]);
 
 /**
- * Map a transported status to a presentation tone. Blocking states are checked
- * first so a live run that is waiting on a human reads as blocked rather than
- * merely live, and anything unrecognized falls through to `bad` instead of
- * being drawn as if it were fine.
+ * 把传输来的状态映射成呈现用的色调。阻塞状态最先判断，这样一个正在等人处理的
+ * 运行会读作「阻塞」而不只是「进行中」；任何无法识别的值都落到 `bad`，而不是
+ * 被画成一切正常的样子。
  */
 export function statusTone(status: string): Tone {
   if (BLOCKED_STATUSES.has(status)) {
@@ -72,9 +69,9 @@ export function statusTone(status: string): Tone {
 }
 
 /**
- * A run is live only while it is still going. The two terminal statuses that end
- * because a human was needed (`needs_confirmation`, `needs_user_input`) read as
- * blocked but are finished, so polling must stop for them too.
+ * 一个运行只在仍在进行时才算「live」。两个因为需要人工介入而结束的终态
+ * （`needs_confirmation`、`needs_user_input`）读起来是阻塞，但其实已经结束，
+ * 因此对它们也必须停止轮询。
  */
 export function isLiveStatus(status: string): boolean {
   return LIVE_STATUSES.has(status);
@@ -88,7 +85,7 @@ export function policyBranch(trace: TraceView): Branch {
     return "denied";
   }
   if (trace.confirmed === true) {
-    // Approved but never executed: the tool was cleared to run and then failed.
+    // 已批准但从未执行：工具被放行去运行，随后失败了。
     return "approved_failed";
   }
   switch (trace.policy_outcome) {
@@ -113,17 +110,16 @@ export interface ProbabilityMeter {
   label: string;
   value: number;
   threshold: number;
-  /** Which side of the threshold the Policy Engine treats as the trigger. */
+  /** 策略引擎把阈值的哪一侧视为触发条件。 */
   direction: "above" | "below";
-  /** Whether this signal is on the triggering side, using the policy's operators. */
+  /** 按策略里的比较方式，这个信号是否落在触发侧。 */
   crossed: boolean;
 }
 
 /**
- * The three `noul` routing probabilities, which the client validates into
- * `[0, 1]`. The comparisons mirror `jev_router/policy.py`: confirmation and
- * reasoning trigger strictly above their thresholds, confidence triggers
- * strictly below its own.
+ * 路由层返回的三个概率，客户端会把它们校验到 `[0, 1]`。比较方式与
+ * `jev_router/policy.py` 一致：确认与推理需求在严格高于各自阈值时触发，
+ * 置信度则在严格低于自身阈值时触发。
  */
 export function probabilityMeters(trace: TraceView): ProbabilityMeter[] {
   const meters: ProbabilityMeter[] = [];
@@ -160,9 +156,8 @@ export function probabilityMeters(trace: TraceView): ProbabilityMeter[] {
 }
 
 /**
- * The completion probability, measured against the Runner's own threshold. It is
- * kept apart from the routing meters because it comes from the Verifier, not the
- * Router, and is only present on a step that was verified.
+ * 完成度，用执行循环自己的阈值来度量。它之所以与路由信号分开，是因为它来自
+ * 验证器而不是路由层，并且只出现在经过验证的步骤上。
  */
 export function completionMeter(trace: TraceView): ProbabilityMeter | null {
   if (!isFiniteNumber(trace.completion_probability)) {
@@ -182,7 +177,7 @@ export interface ScoreReadout {
   key: "route_risk" | "quality_score";
   label: string;
   value: number;
-  /** `null` for a score no threshold is defined against. */
+  /** 没有针对它定义阈值的分数为 `null`。 */
   threshold: number | null;
   level: number;
   levelCount: number;
@@ -190,9 +185,8 @@ export interface ScoreReadout {
 }
 
 /**
- * The two provider scores. `ScoreAnswer.score` is a finite float the core
- * package does not normalize, so these are reported as numbers with their
- * thresholds and a level strip, never as 0–1 meters.
+ * 两个提供方分数。`ScoreAnswer.score` 是核心包不做归一化的有限浮点数，因此
+ * 它们连同阈值和等级条一起以数字形式上报，从不用 0–1 的仪表来表示。
  */
 export function scoreReadouts(trace: TraceView): ScoreReadout[] {
   const readouts: ScoreReadout[] = [];
@@ -224,14 +218,14 @@ export function scoreReadouts(trace: TraceView): ScoreReadout[] {
 export interface VerificationReadout {
   completionProbability: number;
   completionThreshold: number;
-  /** The Runner completes at `>=` its threshold. */
+  /** 执行循环在 `>=` 阈值时判定完成。 */
   completionMet: boolean;
   qualityScore: number;
   qualityLevel: number;
   qualityLevelCount: number;
 }
 
-/** A step carries a verification only when the Verifier ran for it. */
+/** 只有验证器为该步骤运行过，这一步才带有验证结果。 */
 export function verificationReadout(trace: TraceView): VerificationReadout | null {
   if (!isFiniteNumber(trace.completion_probability) || !isFiniteNumber(trace.quality_score)) {
     return null;
@@ -253,7 +247,7 @@ export interface ChainNode {
   branch: Branch;
 }
 
-/** One node per step, in step order, for the run-level decision chain. */
+/** 每个步骤一个节点，按步骤顺序排列，构成运行级别的决策链。 */
 export function decisionChain(traces: TraceView[]): ChainNode[] {
   return [...traces]
     .sort((left, right) => left.step - right.step)
@@ -278,9 +272,8 @@ const BRANCH_LABELS: Record<Branch, string> = {
 };
 
 /**
- * The transported outcome is a stable identifier, so it is translated for
- * display and never rewritten: an unrecognized value falls through to itself
- * rather than being folded into a known label.
+ * 传输来的策略结论是稳定的标识符，因此只做显示上的翻译、绝不改写：无法识别的
+ * 值原样透传，而不是被折叠进某个已知标签。
  */
 const OUTCOME_LABELS: Record<string, string> = {
   execute: "执行",
@@ -291,7 +284,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   reject: "拒绝",
 };
 
-/** The live and terminal statuses, translated the same way. */
+/** 进行中与终态的状态，同样按这种方式翻译。 */
 const STATUS_LABELS: Record<string, string> = {
   running: "运行中",
   awaiting_confirmation: "等待确认",
@@ -315,7 +308,7 @@ export function outcomeLabel(outcome: string | null): string {
   return OUTCOME_LABELS[outcome] ?? outcome;
 }
 
-/** Tone per policy outcome, used for the chain and the step headers. */
+/** 每个策略结论对应的色调，用于决策链和步骤卡片标题。 */
 export function outcomeTone(outcome: string | null): Tone {
   switch (outcome) {
     case "finish":
@@ -333,7 +326,7 @@ export function outcomeTone(outcome: string | null): Tone {
   }
 }
 
-/** A transported status in the operator's language, identifiers intact. */
+/** 用运维者的语言表达传输来的状态，标识符保持原样。 */
 export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status.replace(/_/g, " ");
 }
@@ -361,22 +354,22 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-/** A 0-based index across `levelCount` levels, clamped so an odd score stays drawable. */
+/** 在 `levelCount` 个等级之间的 0 起始索引，做了钳制，让古怪的分数也能画出来。 */
 function levelOf(score: number, levelCount: number): number {
   return Math.min(Math.max(Math.round(score), 0), levelCount - 1);
 }
 
-/** Which router a metric belongs to, for labelling cards and table columns. */
+/** 一个指标属于哪个路由层，用于给卡片和表格列打标签。 */
 export type EvalMode = "jev" | "llm";
 
-/** A rate the mode cannot produce, rendered as absent rather than zero. */
+/** 该模式无法产生的比率，渲染为缺省而不是零。 */
 export const ABSENT_RATE = ABSENT;
 
 export interface MetricCard {
   key: string;
   label: string;
   value: string;
-  /** A short explanation of what the number counts, shown under the value. */
+  /** 对这个数字统计了什么的一句简短说明，显示在数值下方。 */
   detail: string;
   tone: Tone;
 }
@@ -388,11 +381,11 @@ export interface ModeCardSet {
 }
 
 /**
- * The aggregate cards for one mode.
+ * 某个模式的汇总卡片。
  *
- * Every count is shown next to the case count it is a share of, because "88%"
- * hides whether that is 44 of 50 or 4 of 5. Metrics a mode cannot produce — the
- * baseline has no policy outcome — are left out rather than shown as zero.
+ * 每个计数都显示在它所占份额的用例总数旁边，因为「88%」看不出那是 50 个里的
+ * 44 个还是 5 个里的 4 个。某个模式无法产生的指标——基线没有策略结论——会被
+ * 直接略去，而不是显示成零。
  */
 export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
   const total = metrics.case_count;
@@ -415,8 +408,8 @@ export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
       key: "success",
       label: "任务成功",
       value: formatRate(metrics.success_rate),
-      // The baseline has no policy outcome, so confirmation is not part of what
-      // it can succeed at; saying so would describe a fact it cannot have.
+      // 基线没有策略结论，因此确认不是它能成功的一部分；说出来就是在描述
+      // 一个它不可能拥有的事实。
       detail:
         metrics.confirmation_match_count === null
           ? `${metrics.success_count}/${total} 选择了可接受动作`
@@ -482,7 +475,7 @@ export function modeCardSet(metrics: EvalModeMetrics): ModeCardSet {
   };
 }
 
-/** The card sets a run can show, Jev first because it is the subject. */
+/** 一次运行能展示的卡片组，Jev 在前，因为它是主角。 */
 export function comparisonCardSets(metrics: EvalComparisonMetrics): ModeCardSet[] {
   const sets: ModeCardSet[] = [];
   if (metrics.jev !== null) {
@@ -503,9 +496,8 @@ export interface AgreementCard {
 }
 
 /**
- * How often the two routers named the same action. It is absent unless both
- * routers answered at least one case: "0%" and "never compared" are different
- * statements, and only one of them is a finding.
+ * 两个路由层有多少次选中了同一个动作。除非两边都至少回答了一个用例，否则这个
+ * 值是缺省的：「0%」和「从未比较过」是两句不同的话，而只有其中一句是结论。
  */
 export function agreementCard(metrics: EvalComparisonMetrics): AgreementCard | null {
   if (metrics.agreement_rate === null || metrics.compared_count === null) {
@@ -532,11 +524,10 @@ export interface ComparisonRow {
 }
 
 /**
- * One row per case, pairing both routers' outcomes.
+ * 每个用例一行，把两个路由层的结果配成对。
  *
- * Outcomes arrive ordered by `(case_id, mode)`, so a single pass pairs them.
- * `agreed` stays `null` when either side never answered: a router error is not a
- * disagreement, and counting it as one would understate the agreement rate.
+ * 结果按 `(case_id, mode)` 顺序到达，因此一次遍历就能配对。任一侧没有作答时
+ * `agreed` 保持 `null`：路由层报错不算分歧，把它算成分歧会低估一致率。
  */
 export function comparisonRows(outcomes: EvalCaseOutcome[]): ComparisonRow[] {
   const byCase = new Map<string, { jev?: EvalCaseOutcome; llm?: EvalCaseOutcome }>();
@@ -568,7 +559,7 @@ export function comparisonRows(outcomes: EvalCaseOutcome[]): ComparisonRow[] {
   });
 }
 
-/** The action a router reported, or the error that replaced it. */
+/** 路由层上报的动作，或者取代它的那条错误。 */
 export function outcomeAction(outcome: EvalCaseOutcome | null): string {
   if (outcome === null) {
     return ABSENT;
@@ -587,8 +578,8 @@ export function formatTokens(input: number | null, output: number | null): strin
   if (!isFiniteNumber(input) || !isFiniteNumber(output)) {
     return ABSENT;
   }
-  // Means of integer counts: one decimal is the most a reader can use, and a
-  // raw float would print the arithmetic instead of the number.
+  // 对整数计数取均值：一位小数已经是读者能用上的极限，而原始浮点数打印出来的
+  // 是算术过程而不是那个数字。
   return `${round(input)} / ${round(output)}`;
 }
 
@@ -596,7 +587,7 @@ function round(value: number): string {
   return (Math.round(value * 10) / 10).toString();
 }
 
-/** Tone for a rate: higher is better, and the bands are deliberately coarse. */
+/** 比率的色调：越高越好，而且分档刻意做得比较粗。 */
 export function rateTone(value: number | null): Tone {
   if (!isFiniteNumber(value)) {
     return "neutral";

@@ -26,7 +26,7 @@ export default async function EvalRunPage({ params }: PageProps<"/evals/[runId]"
         </div>
       );
     }
-    // The API answered and does not know this run id.
+    // API 应答了，但不认识这个 run id。
     notFound();
   }
 

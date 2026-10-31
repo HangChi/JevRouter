@@ -9,10 +9,9 @@ const TONE_BOX: Record<Tone, string> = {
 };
 
 /**
- * A message the operator has to see before reading the data: the API could not
- * be reached, a run carried a diagnostic, or an answer arrived too late. A
- * connection failure names the upstream so a misconfigured dashboard is obvious
- * rather than looking like an empty system.
+ * 一条运维者必须在读数据之前看到的消息：API 无法连接、运行带有诊断信息，或者
+ * 回答来得太晚。连接失败会点名上游地址，让配置错误的仪表盘一眼可见，而不是
+ * 看起来像一个空系统。
  */
 export function Notice({
   tone = "neutral",

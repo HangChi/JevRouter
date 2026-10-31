@@ -18,10 +18,10 @@ function describe(error: unknown): string {
 }
 
 /**
- * Start a run and land on its page.
+ * 启动一次运行并跳转到它的页面。
  *
- * `redirect` throws, so it is deliberately outside the try: catching it would
- * turn a successful submit into a reported failure.
+ * `redirect` 会抛异常，所以它被刻意放在 try 之外：把它捕获会把一次成功的提交
+ * 变成一次被报告的失败。
  */
 export async function submitTaskAction(
   _previous: ActionResult | undefined,
@@ -56,10 +56,14 @@ export async function submitTaskAction(
   redirect(`/tasks/${taskId}`);
 }
 
-/** Answer a pending confirmation. A `409` means the run moved on without us. */
-export async function confirmTaskAction(taskId: string, approved: boolean): Promise<ActionResult> {
+/** 回应一次待确认。`409` 表示这次运行已经自己往下走了，我们手上的批准作废。 */
+export async function confirmTaskAction(
+  taskId: string,
+  approved: boolean,
+  digest: string,
+): Promise<ActionResult> {
   try {
-    await createApiClient().confirmTask(taskId, approved);
+    await createApiClient().confirmTask(taskId, approved, digest);
   } catch (error) {
     return { ok: false, message: describe(error) };
   }
@@ -67,7 +71,7 @@ export async function confirmTaskAction(taskId: string, approved: boolean): Prom
   return { ok: true };
 }
 
-/** Answer a pending question. A `409` means the run moved on without us. */
+/** 回答一次待确认的问题。`409` 表示这次运行已经自己往下走了。 */
 export async function provideInputAction(
   taskId: string,
   _previous: ActionResult | undefined,

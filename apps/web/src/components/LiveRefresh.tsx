@@ -4,12 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Keeps a live run current.
+ * 让进行中的运行保持最新。
  *
- * The API has no streaming endpoint, so the page re-renders on an interval
- * instead of holding a connection open. Polling stops as soon as the run is
- * terminal: a finished run costs no further requests, and the server components
- * re-run on their own when a prompt is answered.
+ * API 没有流式端点，因此页面按固定间隔重新渲染，而不是一直挂着一个连接。运行
+ * 一旦进入终态就停止轮询：已结束的运行不再产生额外请求，而用户回答提示后，
+ * 服务端组件会自行重新执行。
  */
 export function LiveRefresh({ active, intervalMs = 2000 }: { active: boolean; intervalMs?: number }) {
   const router = useRouter();

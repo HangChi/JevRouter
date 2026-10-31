@@ -1,7 +1,7 @@
 import { MetricCard } from "./MetricCard";
 import type { ModeCardSet } from "@/lib/viewModel";
 
-/** One mode's aggregate cards, headed by the router they belong to. */
+/** 一个模式的汇总卡片，以它们所属的路由层作为标题。 */
 export function MetricCards({ set }: { set: ModeCardSet }) {
   return (
     <section className="flex flex-col gap-2">

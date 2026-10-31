@@ -109,11 +109,14 @@ describe("createApiClient", () => {
     const { calls, fetchImpl } = stubFetch(() => new Response(null, { status: 204 }));
     const client = createApiClient({ upstream: UPSTREAM, fetchImpl });
 
-    await client.confirmTask("abc", true);
+    await client.confirmTask("abc", true, "digest-1");
     await client.provideInput("abc", "42");
 
     expect(calls[0].input).toBe(`${UPSTREAM}/tasks/abc/confirm`);
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ approved: true });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      approved: true,
+      digest: "digest-1",
+    });
     expect(calls[1].input).toBe(`${UPSTREAM}/tasks/abc/input`);
     expect(JSON.parse(String(calls[1].init?.body))).toEqual({ answer: "42" });
   });
@@ -135,7 +138,7 @@ describe("createApiClient", () => {
     );
     const client = createApiClient({ upstream: UPSTREAM, fetchImpl });
 
-    const error = await client.confirmTask("abc", true).catch((caught: unknown) => caught);
+    const error = await client.confirmTask("abc", true, "digest-1").catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(409);
   });

@@ -2,7 +2,7 @@ import { formatDuration, formatTokens, outcomeAction, type ComparisonRow } from 
 
 const CELL = "px-3 py-2 align-top text-xs";
 
-/** What one router did with one case, as one table cell. */
+/** 一个路由层对一个用例做了什么，作为一个表格单元格。 */
 function RouterCell({ outcome }: { outcome: ComparisonRow["jev"] }) {
   if (outcome === null) {
     return <span className="font-mono text-muted">—</span>;
@@ -34,11 +34,10 @@ function AgreementCell({ agreed }: { agreed: boolean | null }) {
 }
 
 /**
- * One row per case, both routers side by side.
+ * 每个用例一行，两个路由层并排。
  *
- * A router that errored shows its error instead of an action, and agreement is
- * left blank: an error is not a disagreement, and counting it as one would
- * understate the agreement rate the cards above report.
+ * 出错的路由层显示它的错误而不是动作，一致性留空：错误不算分歧，把它算成分歧
+ * 会低估上方卡片报告的一致率。
  */
 export function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
   return (

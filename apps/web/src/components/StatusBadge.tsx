@@ -17,8 +17,7 @@ const TONE_TINT: Record<Tone, string> = {
 };
 
 /**
- * A status is never carried by colour alone: the dot tints the pill and the
- * transported status string is always spelled out beside it.
+ * 状态绝不只靠颜色传达：圆点为胶囊染色，而传输来的状态字符串始终在它旁边写出来。
  */
 export function StatusBadge({ status }: { status: string }) {
   const tone = statusTone(status);

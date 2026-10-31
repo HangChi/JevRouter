@@ -4,7 +4,7 @@ import type { TaskSummary } from "@/lib/types";
 import { isLiveStatus } from "@/lib/viewModel";
 import { StatusBadge } from "./StatusBadge";
 
-/** The runs the API knows about, newest first, as the API returns them. */
+/** API 知道的运行，最新的在前，按 API 返回的样子展示。 */
 export function TaskList({ tasks }: { tasks: TaskSummary[] }) {
   if (tasks.length === 0) {
     return (
@@ -24,8 +24,8 @@ export function TaskList({ tasks }: { tasks: TaskSummary[] }) {
           >
             <StatusBadge status={task.status} />
             <span className="min-w-0 flex-1 truncate text-sm text-ink">{task.goal}</span>
-            {/* A live handle has no step count yet: the API only records it when
-                the run finishes, so showing it would read as "no steps taken". */}
+            {/* 进行中的句柄还没有步骤数：API 只在运行结束时才记录它，
+                显示出来会被读成「一步都没走」。 */}
             {isLiveStatus(task.status) ? null : (
               <span className="font-mono text-xs tabular-nums text-ink-2">
                 {task.step} 步

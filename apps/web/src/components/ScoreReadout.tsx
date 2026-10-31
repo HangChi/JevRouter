@@ -4,11 +4,10 @@ import { formatScore } from "@/lib/viewModel";
 const LEVEL_FILL = ["bg-level-1", "bg-level-2", "bg-level-3", "bg-level-4", "bg-level-5"];
 
 /**
- * A provider score, which the core package does not normalize.
+ * 一个提供方分数，核心包不对它做归一化。
  *
- * The number is the primary read; the pip strip is an ordered ordinal ramp
- * over the levels the question was asked against, and the threshold — when one
- * exists — is stated in words rather than implied by colour.
+ * 数字是主要的读法；刻度点条是针对提问时所依据的等级、按序排列的等级阶梯；
+ * 阈值——如果存在——用文字说明，而不是靠颜色暗示。
  */
 export function ScoreReadout({ readout }: { readout: Readout }) {
   const pips = Array.from({ length: readout.levelCount }, (_, index) => index);

@@ -1,8 +1,8 @@
 /**
- * Raw JSON from a trace field, collapsed until it is wanted.
+ * trace 字段里的原始 JSON，默认折叠，需要时再展开。
  *
- * Tool results, arguments and state snapshots have a shape this layer does not
- * model, so they are shown verbatim rather than through a fixed view.
+ * 工具结果、参数和状态快照的形状这一层并不建模，因此原样展示，而不套用一个
+ * 固定的视图。
  */
 export function JsonBlock({
   label,
