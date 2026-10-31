@@ -1,5 +1,7 @@
 # 开发与验证约定
 
+这是实现层的长文档：每个模块为什么这样切、契约是怎么被真实响应纠正的、测试分几层。想快速上手请先看 [快速开始](quickstart.md)；查配置项看 [配置参考](configuration.md)；查接口看 [HTTP API 参考](api.md)。
+
 ## 项目状态
 
 Jev client（`jev_router.clients.jev`）、LLM client（`jev_router.clients.llm`）、工具协议与注册表、Router、Policy Engine、任务状态与执行预算、Verifier、受限 Runner、trace 持久化、API HTTP 边界、Web trace 仪表盘、eval 运行器，以及 eval 结果的持久化与对比仪表盘均已完成。Jev client 仅覆盖文档确认的 `POST /v1/systemone` 以及 `noul`、`choice`、`score` 三种 typed question；LLM client 仅覆盖 Anthropic Messages API 的 `POST /v1/messages`。
