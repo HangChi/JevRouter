@@ -8,6 +8,7 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -18,6 +19,10 @@ node_modules/
 .next/
 dist/
 build/
+
+# 评测产物
+evals-report*.json
+evals-calibration.json
 
 # Local data and secrets
 *.sqlite

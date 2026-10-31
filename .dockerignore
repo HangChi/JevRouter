@@ -1,0 +1,17 @@
+.git
+.github
+.gitignore
+.venv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.pytest_tmp
+__pycache__
+*.pyc
+.DS_Store
+traces.db
+workspace
+apps/web/node_modules
+apps/web/.next
+specs
+evals-report.json

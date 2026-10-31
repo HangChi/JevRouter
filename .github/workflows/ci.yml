@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python 核心与 API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: 安装依赖
+        run: uv sync --all-groups
+      - name: Lint
+        run: uv run ruff check .
+      - name: 类型检查
+        run: uv run mypy jev_router apps evals
+      - name: 测试
+        run: uv run pytest
+
+  web:
+    name: Web 仪表盘
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      - name: 类型检查
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: 测试
+        run: npm test
+      - name: 构建
+        run: npm run build
