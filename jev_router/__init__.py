@@ -1,4 +1,4 @@
-"""JevRouter core package."""
+"""JevRouter 核心包。"""
 
 from jev_router.policy import PolicyDecision, PolicyEngine, PolicyOutcome
 from jev_router.router import RouteDecision, Router

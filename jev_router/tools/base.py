@@ -18,9 +18,8 @@ class Tool(Protocol):
     name: str
     description: str
     risk: RiskLevel
-    # The model `execute` validates its input against. A caller that has to
-    # synthesize arguments (an LLM resolver) reads the schema from here rather
-    # than from a second description that could drift from the real check.
+    # `execute` 用于校验输入的模型。需要自行构造参数（例如 LLM 解析器）的
+    # 调用方从这里读取 schema，而不是依赖另一份可能与真实校验漂移的描述。
     input_model: type[BaseModel]
 
     def execute(self, input: dict[str, Any]) -> ToolResult: ...

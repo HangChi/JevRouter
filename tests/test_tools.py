@@ -23,9 +23,9 @@ def test_registry_resolves_registered_tools_and_rejects_duplicates() -> None:
     assert registry.names() == ("calculator",)
     assert registry.get("calculator") is calculator
     assert registry.execute("calculator", {"expression": "2 * (3 + 4)"}).output == {"result": 14.0}
-    with pytest.raises(ValueError, match="already registered"):
+    with pytest.raises(ValueError, match="已注册"):
         registry.register(calculator)
-    with pytest.raises(KeyError, match="not registered"):
+    with pytest.raises(KeyError, match="未注册"):
         registry.get("unknown")
 
 
@@ -49,7 +49,7 @@ def test_knowledge_search_uses_injected_documents_and_bounds_results() -> None:
     assert result.output["results"] == [
         {"title": "Python", "content": "Python supports typed arithmetic."}
     ]
-    with pytest.raises(ValueError, match="invalid search input"):
+    with pytest.raises(ValueError, match="搜索输入无效"):
         tool.execute({"query": "", "limit": 1})
 
 
@@ -77,7 +77,7 @@ def test_write_file_creates_relative_file_and_denies_overwrite(tmp_path: Path) -
 
     assert result.output == {"path": "notes/today.txt", "bytes_written": 5}
     assert (tmp_path / "workspace" / "notes" / "today.txt").read_text() == "hello"
-    with pytest.raises(ValueError, match="overwriting"):
+    with pytest.raises(ValueError, match="覆盖"):
         tool.execute({"path": "notes/today.txt", "content": "changed"})
 
 
@@ -85,9 +85,9 @@ def test_write_file_rejects_absolute_traversal_and_oversized_content(tmp_path: P
     tool = WriteFileTool(tmp_path / "workspace", max_bytes=4)
 
     for path in ("../outside.txt", str(tmp_path / "absolute.txt")):
-        with pytest.raises(ValueError, match="configured root"):
+        with pytest.raises(ValueError, match="根目录"):
             tool.execute({"path": path, "content": "x"})
-    with pytest.raises(ValueError, match="size limit"):
+    with pytest.raises(ValueError, match="大小上限"):
         tool.execute({"path": "large.txt", "content": "12345"})
 
 
@@ -99,7 +99,7 @@ def test_write_file_rejects_symlink_escape(tmp_path: Path) -> None:
     (root / "escape").symlink_to(outside, target_is_directory=True)
     tool = WriteFileTool(root)
 
-    with pytest.raises(ValueError, match="configured root"):
+    with pytest.raises(ValueError, match="根目录"):
         tool.execute({"path": "escape/file.txt", "content": "blocked"})
     assert not (outside / "file.txt").exists()
 
@@ -120,16 +120,16 @@ def test_mock_email_validates_and_only_returns_simulated_metadata() -> None:
 
     assert tool.risk == "external"
     assert result.output == {"status": "simulated", "to": "alice@example.test", "subject": "Weather"}
-    with pytest.raises(ValueError, match="invalid mock email"):
+    with pytest.raises(ValueError, match="模拟邮件输入无效"):
         tool.execute({"to": "not-an-email", "subject": "Weather", "body": "Sunny"})
 
 
 def test_every_tool_declares_the_model_its_execute_validates() -> None:
-    """The LLM argument resolver reads the schema from `input_model`.
+    """LLM 参数解析器从 `input_model` 读取 schema。
 
-    If a tool declared a model its `execute` does not actually validate against,
-    the prompt would advertise a shape the tool refuses — so the two are checked
-    against each other here rather than trusted to stay in step.
+    如果某个工具声明的模型并不是它 `execute` 实际校验的对象，提示词就会宣传
+    一种该工具会拒绝的形状 —— 因此这里让两者互相校验，而不是指望它们自觉保持
+    一致。
     """
     documents = [SearchDocument(title="t", content="c")]
     tools = [
@@ -143,7 +143,7 @@ def test_every_tool_declares_the_model_its_execute_validates() -> None:
         schema = tool.input_model.model_json_schema()
         assert schema["type"] == "object"
         assert schema.get("properties"), tool.name
-        # A field the schema does not describe must be refused by the tool.
+        # schema 未描述的字段必须被工具拒绝。
         rejected = False
         try:
             tool.input_model.model_validate({"unknown_field": "x"})

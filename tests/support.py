@@ -1,7 +1,7 @@
-"""Shared offline doubles for the Jev provider.
+"""Jev 提供方共用的离线替身。
 
-Every test drives the core through ``httpx.MockTransport``, so no test reaches
-the network, needs a credential, or produces a billable request.
+每个测试都通过 ``httpx.MockTransport`` 驱动核心，因此没有测试会访问网络、
+需要凭据，或产生计费请求。
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ TEST_MODEL = "test-model"
 
 
 class FakeJev:
-    """Serves canned systemone responses, keyed by which question set was asked."""
+    """按所问的问题集提供预置的 systemone 响应。"""
 
     def __init__(self, *, fail_verify_transport: bool = False) -> None:
         self.routes: list[dict[str, Any]] = []
@@ -67,7 +67,7 @@ class FakeJev:
 
 
 class StubResolver:
-    """Stands in for the LLM-backed argument synthesis a later phase will supply."""
+    """代替后续阶段将提供的、由 LLM 驱动的参数合成。"""
 
     def __init__(self, arguments: Any = None) -> None:
         self.arguments = arguments if arguments is not None else {"expression": "2 + 2"}

@@ -83,8 +83,8 @@ def make_result(
         try:
             state = state.advance(item.action, item.result)
         except ValueError:
-            # The Runner records the step but never advances the state when the
-            # result cannot be snapshotted, which is exactly this case.
+            # 当结果无法生成快照时，执行循环只记录该步骤，而不会推进状态，
+            # 这里正是这种情况。
             pass
     return RunResult(
         status=status,  # type: ignore[arg-type]
@@ -203,7 +203,7 @@ def test_a_newer_schema_is_refused(tmp_path: Path) -> None:
     connection.commit()
     connection.close()
 
-    with pytest.raises(StorageError, match="newer than supported"):
+    with pytest.raises(StorageError, match="比支持的版本"):
         TraceStore(path)
 
 
@@ -215,7 +215,7 @@ def test_an_unknown_payload_version_is_refused(store: TraceStore) -> None:
     )
     store._connection.commit()
 
-    with pytest.raises(StorageError, match="payload version 99"):
+    with pytest.raises(StorageError, match="payload 版本 99"):
         store.load_traces("task-1")
 
 
@@ -227,7 +227,7 @@ def test_a_malformed_payload_is_refused(store: TraceStore) -> None:
     )
     store._connection.commit()
 
-    with pytest.raises(StorageError, match="not a versioned payload"):
+    with pytest.raises(StorageError, match="不是带版本的载荷"):
         store.load_traces("task-1")
 
 
@@ -247,7 +247,7 @@ def test_unserializable_results_degrade_instead_of_failing(store: TraceStore) ->
 
     loaded = store.load_traces("task-1")
 
-    # Only the offending leaf is replaced, so the readable part survives.
+    # 只有出问题的叶子节点会被替换，因此可读的部分得以保留。
     assert loaded[0].result == {"value": {"__unserializable__": "object"}}
 
 
@@ -267,7 +267,7 @@ def test_list_tasks_orders_by_creation(tmp_path: Path) -> None:
 
         assert [record.task_id for record in listed] == ["task-b", "task-a"]
         assert store.list_tasks(limit=1)[0].task_id == "task-b"
-        with pytest.raises(ValueError, match="limit must be positive"):
+        with pytest.raises(ValueError, match="limit 必须为正数"):
             store.list_tasks(limit=0)
 
 
@@ -294,7 +294,7 @@ def test_separate_tasks_do_not_collide(store: TraceStore) -> None:
 
 
 def test_a_missing_database_directory_is_refused(tmp_path: Path) -> None:
-    with pytest.raises(StorageError, match="directory does not exist"):
+    with pytest.raises(StorageError, match="目录不存在"):
         TraceStore(tmp_path / "absent" / "traces.db")
 
 
@@ -326,7 +326,7 @@ async def test_no_credential_reaches_the_database(tmp_path: Path) -> None:
             trace_sink=store.sink(),
         )
         result = await runner.run("Calculate 2 + 2")
-        # The sink must have written the step already; record() only finalizes.
+        # 此时 sink 必须已经写入该步骤；record() 只负责收尾。
         assert len(store.load_traces(result.task_id)) == 1
         assert store.load_task(result.task_id) is not None
         assert store.load_task(result.task_id).status == RUNNING_STATUS
@@ -398,7 +398,7 @@ def test_listing_eval_runs_respects_the_limit(store: TraceStore) -> None:
         store.record_eval_run(eval_run(f"run-{index}", case_ids=("case-1",)))
 
     assert len(store.list_eval_runs(limit=2)) == 2
-    with pytest.raises(ValueError, match="limit must be positive"):
+    with pytest.raises(ValueError, match="limit 必须为正数"):
         store.list_eval_runs(limit=0)
 
 
@@ -415,7 +415,7 @@ def test_a_tampered_eval_payload_is_refused(store: TraceStore) -> None:
     )
     store._connection.commit()
 
-    with pytest.raises(StorageError, match="payload version 99"):
+    with pytest.raises(StorageError, match="payload 版本 99"):
         store.load_eval_run("run-1")
 
 

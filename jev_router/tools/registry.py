@@ -13,16 +13,16 @@ class ToolRegistry:
 
     def register(self, tool: Tool) -> None:
         if not tool.name or tool.name.strip() != tool.name:
-            raise ValueError("tool name must be non-empty and trimmed")
+            raise ValueError("工具名称不得为空且不得含首尾空白")
         if tool.name in self._tools:
-            raise ValueError("tool is already registered")
+            raise ValueError("工具已注册")
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> Tool:
         try:
             return self._tools[name]
         except KeyError as exc:
-            raise KeyError("tool is not registered") from exc
+            raise KeyError("工具未注册") from exc
 
     def names(self) -> tuple[str, ...]:
         return tuple(self._tools)

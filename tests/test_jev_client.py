@@ -217,14 +217,14 @@ async def test_timeout_failure_is_typed() -> None:
     async def handler(_: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("internal timeout details")
 
-    with pytest.raises(TransportError, match="timed out"):
+    with pytest.raises(TransportError, match="超时"):
         await JevClient(config(), httpx.MockTransport(handler)).systemone(
             model="test-model", state={}, questions=mixed_questions()
         )
 
 
 def test_environment_configuration_requires_api_key() -> None:
-    with pytest.raises(ConfigurationError, match="JEV_API_KEY is required"):
+    with pytest.raises(ConfigurationError, match="JEV_API_KEY"):
         JevClientConfig.from_env({})
 
     loaded = JevClientConfig.from_env(
@@ -234,10 +234,10 @@ def test_environment_configuration_requires_api_key() -> None:
     assert loaded.timeout_seconds == 12
 
 
-# Captured from a live POST /v1/systemone against jev-latest. The score answer
-# carries an index-keyed legend and probabilities, which the phase-1 stubs never
-# produced: every offline test passed while a real run failed validation. This
-# fixture is the contract as observed, not as assumed.
+# 取自对 jev-latest 的一次真实 POST /v1/systemone。score 类型的答案携带的是
+# 以索引为键的 legend 和 probabilities，而第一阶段的替身从未产生过这种形状：
+# 所有离线测试都通过，真实运行却在校验时失败。这份测试夹具是观察到的契约，
+# 而不是假定的契约。
 LIVE_SCORE_RESPONSE = {
     "model": "jev-1.13.0",
     "answers": {
@@ -313,7 +313,7 @@ async def test_a_live_score_answer_is_accepted_and_normalized() -> None:
 
 
 def test_a_list_legend_still_validates() -> None:
-    """The label-keyed shape the offline fixtures use remains accepted."""
+    """离线测试夹具所用的、以标签为键的形状仍然被接受。"""
     answer = ScoreAnswer.model_validate(
         {
             "type": "score",
@@ -328,7 +328,7 @@ def test_a_list_legend_still_validates() -> None:
 
 @pytest.mark.asyncio
 async def test_a_score_answer_keyed_neither_by_index_nor_by_label_is_refused() -> None:
-    """The legend normalizes, so the criteria check is what catches a mismatch."""
+    """legend 会被归一化，因此捕获不匹配的是 criteria 校验。"""
     payload = json.loads(json.dumps(LIVE_SCORE_RESPONSE))
     payload["answers"]["risk"]["probabilities"] = {"a": 0.5, "b": 0.5}
 
@@ -344,7 +344,7 @@ async def test_a_score_answer_keyed_neither_by_index_nor_by_label_is_refused() -
 
 @pytest.mark.asyncio
 async def test_a_rounded_distribution_is_accepted() -> None:
-    """The provider rounds to two decimals, so an 8-way sum of 0.99 is valid."""
+    """提供方会四舍五入到两位小数，因此 8 路求和为 0.99 是合法的。"""
     payload = answer_payload()
     payload["answers"]["route"]["probabilities"] = {
         "search": 0.33,
@@ -379,7 +379,7 @@ async def test_a_broken_distribution_names_the_check_that_failed() -> None:
         await JevClient(config(), httpx.MockTransport(handler)).systemone(
             model="test-model", state={}, questions=mixed_questions()
         )
-    assert "sum to 1" in str(excinfo.value)
+    assert "之和必须为 1" in str(excinfo.value)
     assert excinfo.value.category == "response_validation"
 
 
@@ -395,4 +395,4 @@ async def test_a_mismatched_answer_set_names_the_check_that_failed() -> None:
         await JevClient(config(), httpx.MockTransport(handler)).systemone(
             model="test-model", state={}, questions=mixed_questions()
         )
-    assert "questions must match" in str(excinfo.value)
+    assert "问题必须与请求中的问题一致" in str(excinfo.value)

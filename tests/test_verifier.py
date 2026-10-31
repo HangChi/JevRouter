@@ -149,7 +149,7 @@ async def test_verifier_rejects_state_without_completed_step_before_io() -> None
         called = True
         return httpx.Response(200, json=response_payload())
 
-    with pytest.raises(ValueError, match="at least one completed step"):
+    with pytest.raises(ValueError, match="至少需要一个已完成的步骤"):
         await Verifier(JevClient(config(), httpx.MockTransport(handler)), "test-model").verify(
             TaskState(goal="Find tomorrow's weather in Tokyo")
         )
@@ -165,7 +165,7 @@ async def test_verifier_rejects_state_without_latest_result_before_io() -> None:
         called = True
         return httpx.Response(200, json=response_payload())
 
-    with pytest.raises(ValueError, match="latest result"):
+    with pytest.raises(ValueError, match="最新结果"):
         await Verifier(JevClient(config(), httpx.MockTransport(handler)), "test-model").verify(
             TaskState(goal="Find tomorrow's weather in Tokyo").advance("web_search")
         )

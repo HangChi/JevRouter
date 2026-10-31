@@ -41,9 +41,9 @@ class Verifier:
 
     async def verify(self, state: TaskState) -> VerificationDecision:
         if state.step < 1 or not state.history:
-            raise ValueError("verification requires at least one completed step")
+            raise ValueError("验证至少需要一个已完成的步骤")
         if state.last_result is None:
-            raise ValueError("verification requires a latest result")
+            raise ValueError("验证需要最新结果")
         questions: dict[str, Question] = {
             _COMPLETION_QUESTION: NoulQuestion(
                 instructions="Does the current result satisfy the user goal?"
@@ -61,9 +61,9 @@ class Verifier:
         completion_answer = response.answers[_COMPLETION_QUESTION]
         quality_answer = response.answers[_QUALITY_QUESTION]
         if not isinstance(completion_answer, NoulAnswer):
-            raise TypeError("task_complete must be a noul answer")
+            raise TypeError("task_complete 必须是 noul 类型的回答")
         if not isinstance(quality_answer, ScoreAnswer):
-            raise TypeError("result_quality must be a score answer")
+            raise TypeError("result_quality 必须是 score 类型的回答")
         return VerificationDecision(
             completion_probability=completion_answer.noul,
             quality_score=quality_answer.score,

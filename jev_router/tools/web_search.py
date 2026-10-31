@@ -22,7 +22,7 @@ class WebSearchMockTool:
         try:
             request = SearchInput.model_validate(input)
         except ValidationError as exc:
-            raise ValueError("invalid search input") from exc
+            raise ValueError("搜索输入无效") from exc
         terms = request.query.casefold().split()
         matches = [
             result for result in self._results

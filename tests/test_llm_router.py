@@ -18,7 +18,7 @@ MODEL = "claude-sonnet-4-5"
 
 
 class StubCompleter:
-    """Answers every completion with canned text and records the prompt."""
+    """用预置文本回答每次补全，并记录下提示词。"""
 
     def __init__(self, text: str) -> None:
         self.text = text

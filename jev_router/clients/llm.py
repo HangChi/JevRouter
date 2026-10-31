@@ -36,32 +36,31 @@ class LLMTransportError(LLMClientError):
 
 class LLMHttpError(LLMClientError):
     def __init__(self, status_code: int) -> None:
-        super().__init__("http", "LLM service returned an unsuccessful status", status_code=status_code)
+        super().__init__("http", "LLM 服务返回了失败状态", status_code=status_code)
 
 
 class LLMResponseDecodingError(LLMClientError):
     def __init__(self) -> None:
-        super().__init__("response_decoding", "LLM service returned invalid JSON")
+        super().__init__("response_decoding", "LLM 服务返回了无效的 JSON")
 
 
 class LLMResponseValidationError(LLMClientError):
     def __init__(self) -> None:
-        super().__init__("response_validation", "LLM service response did not match the expected schema")
+        super().__init__("response_validation", "LLM 服务的响应与预期的结构不匹配")
 
 
 @dataclass(frozen=True)
 class LLMClientConfig:
-    """Connection settings for the LLM adapter.
+    """LLM 适配器的连接设置。
 
-    Mirrors ``JevClientConfig``: everything is validated at construction so a
-    misconfigured deployment fails before the first completion is requested.
+    与 ``JevClientConfig`` 对应：所有内容都在构造时校验，因此配置错误的
+    部署会在第一次请求补全之前就失败。
 
-    ``api_style`` selects the wire format. ``messages`` is the Anthropic Messages
-    API (``POST /v1/messages``, ``x-api-key``); ``chat_completions`` is the
-    OpenAI-compatible shape many gateways expose (``POST /chat/completions``,
-    ``Authorization: Bearer``), where the base URL already carries the version
-    segment. Both produce the same ``LLMCompletion``, so no consumer cares which
-    one a deployment uses.
+    ``api_style`` 选择线格式。``messages`` 是 Anthropic Messages API
+    （``POST /v1/messages``、``x-api-key``）；``chat_completions`` 是许多
+    网关提供的 OpenAI 兼容形状（``POST /chat/completions``、
+    ``Authorization: Bearer``），其 base URL 已带上版本段。两者产出相同的
+    ``LLMCompletion``，因此消费方不关心部署用的是哪一种。
     """
 
     api_key: str = field(repr=False)
@@ -73,33 +72,33 @@ class LLMClientConfig:
 
     def __post_init__(self) -> None:
         if not self.api_key.strip():
-            raise LLMConfigurationError("LLM_API_KEY must not be empty")
+            raise LLMConfigurationError("LLM_API_KEY 不得为空")
         if not self.base_url.startswith("https://"):
-            raise LLMConfigurationError("LLM_BASE_URL must use HTTPS")
+            raise LLMConfigurationError("LLM_BASE_URL 必须使用 HTTPS")
         if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
-            raise LLMConfigurationError("LLM_TIMEOUT_SECONDS must be a finite positive number")
+            raise LLMConfigurationError("LLM_TIMEOUT_SECONDS 必须是有限的正数")
         if self.max_tokens < 1:
-            raise LLMConfigurationError("LLM_MAX_TOKENS must be positive")
+            raise LLMConfigurationError("LLM_MAX_TOKENS 必须为正数")
         if not self.api_version.strip():
-            raise LLMConfigurationError("LLM_API_VERSION must not be empty")
+            raise LLMConfigurationError("LLM_API_VERSION 不得为空")
         if self.api_style not in ("messages", "chat_completions"):
-            raise LLMConfigurationError("LLM_API_STYLE must be 'messages' or 'chat_completions'")
+            raise LLMConfigurationError("LLM_API_STYLE 必须是 'messages' 或 'chat_completions'")
 
     @classmethod
     def from_env(cls, environ: Optional[Mapping[str, str]] = None) -> LLMClientConfig:
         env = os.environ if environ is None else environ
         key = env.get("LLM_API_KEY", "")
         if not key:
-            raise LLMConfigurationError("LLM_API_KEY is required")
+            raise LLMConfigurationError("必须提供 LLM_API_KEY")
         base_url = env.get("LLM_BASE_URL", "https://api.anthropic.com")
         try:
             timeout = float(env.get("LLM_TIMEOUT_SECONDS", "30"))
         except ValueError as exc:
-            raise LLMConfigurationError("LLM_TIMEOUT_SECONDS must be numeric") from exc
+            raise LLMConfigurationError("LLM_TIMEOUT_SECONDS 必须是数字") from exc
         try:
             max_tokens = int(env.get("LLM_MAX_TOKENS", "1024"))
         except ValueError as exc:
-            raise LLMConfigurationError("LLM_MAX_TOKENS must be an integer") from exc
+            raise LLMConfigurationError("LLM_MAX_TOKENS 必须是整数") from exc
         return cls(
             api_key=key,
             base_url=base_url,
@@ -112,7 +111,7 @@ class LLMClientConfig:
 
 @dataclass(frozen=True)
 class LLMCompletion:
-    """One completion, with the token counts the comparison metrics need."""
+    """一次补全，附带对比指标所需的 token 计数。"""
 
     text: str
     model: str
@@ -137,7 +136,7 @@ class _Usage(BaseModel):
     @classmethod
     def validate_tokens(cls, value: int) -> int:
         if value < 0:
-            raise ValueError("token counts must not be negative")
+            raise ValueError("token 数不得为负数")
         return value
 
 
@@ -171,7 +170,7 @@ class _ChatUsage(BaseModel):
     @classmethod
     def validate_tokens(cls, value: int) -> int:
         if value < 0:
-            raise ValueError("token counts must not be negative")
+            raise ValueError("token 数不得为负数")
         return value
 
 
@@ -185,12 +184,12 @@ class _ChatCompletionsResponse(BaseModel):
 
 @dataclass
 class LLMClient:
-    """Minimal LLM client over two wire formats.
+    """极简 LLM 客户端，支持两种线格式。
 
-    One ``complete`` call, one injectable transport, no retries — the same shape
-    as ``JevClient`` so both adapters fail the same way and are testable without
-    a credential. ``api_style`` on the config picks the request and response
-    shape; everything downstream sees only ``LLMCompletion``.
+    一次 ``complete`` 调用、一个可注入的 transport、不做重试——与
+    ``JevClient`` 形状一致，两个适配器因此以相同方式失败，且无需凭据即可
+    测试。配置上的 ``api_style`` 决定请求与响应的形状；下游看到的只有
+    ``LLMCompletion``。
     """
 
     config: LLMClientConfig
@@ -205,12 +204,12 @@ class LLMClient:
         max_tokens: Optional[int] = None,
     ) -> LLMCompletion:
         if not model or not model.strip():
-            raise LLMRequestValidationError("model is required")
+            raise LLMRequestValidationError("必须提供 model")
         if not prompt.strip():
-            raise LLMRequestValidationError("prompt must not be empty")
+            raise LLMRequestValidationError("prompt 不得为空")
         tokens = self.config.max_tokens if max_tokens is None else max_tokens
         if tokens < 1:
-            raise LLMRequestValidationError("max_tokens must be positive")
+            raise LLMRequestValidationError("max_tokens 必须为正数")
         if self.config.api_style == "chat_completions":
             url, headers, payload = self._chat_request(model, system, prompt, tokens)
         else:
@@ -220,9 +219,9 @@ class LLMClient:
             try:
                 response = await client.post(url, headers=headers, json=payload)
             except httpx.TimeoutException as exc:
-                raise LLMTransportError("LLM service request timed out") from exc
+                raise LLMTransportError("LLM 服务请求超时") from exc
             except httpx.RequestError as exc:
-                raise LLMTransportError("LLM service request failed") from exc
+                raise LLMTransportError("LLM 服务请求失败") from exc
 
         if response.is_error:
             raise LLMHttpError(response.status_code)
@@ -254,7 +253,7 @@ class LLMClient:
     def _chat_request(
         self, model: str, system: str, prompt: str, tokens: int
     ) -> tuple[str, dict[str, str], dict[str, Any]]:
-        # The base URL already carries the version segment for this style.
+        # 这种风格下 base URL 已经包含版本段。
         url = urljoin(self.config.base_url.rstrip("/") + "/", "chat/completions")
         headers = {
             "Authorization": "Bearer " + self.config.api_key,

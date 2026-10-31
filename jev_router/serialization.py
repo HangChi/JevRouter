@@ -5,12 +5,12 @@ from typing import Any
 
 
 def jsonable(value: Any) -> Any:
-    """Convert an immutable state snapshot into a plain JSON-compatible structure.
+    """把不可变的 state 快照转换成普通、与 JSON 兼容的结构。
 
-    ``TaskState`` snapshots use ``MappingProxyType`` and ``tuple``, which
-    ``json.dumps`` cannot serialize. ``JevClient.systemone`` validates the request
-    payload with ``json.dumps(allow_nan=False)`` before sending it, so snapshots
-    must be flattened here or the client raises ``RequestValidationError``.
+    ``TaskState`` 的快照使用 ``MappingProxyType`` 和 ``tuple``，
+    ``json.dumps`` 无法序列化它们。``JevClient.systemone`` 在发送前会用
+    ``json.dumps(allow_nan=False)`` 校验请求载荷，因此必须在这里把快照展平，
+    否则客户端会抛出 ``RequestValidationError``。
     """
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
@@ -18,4 +18,4 @@ def jsonable(value: Any) -> Any:
         return {str(key): jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [jsonable(item) for item in value]
-    raise ValueError("state values must be JSON-compatible")
+    raise ValueError("state 值必须与 JSON 兼容")

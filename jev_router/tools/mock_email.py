@@ -30,7 +30,7 @@ class MockEmailInput(BaseModel):
     def validate_recipient(cls, value: str) -> str:
         local, separator, domain = value.rpartition("@")
         if not separator or not local or "." not in domain or any(char.isspace() for char in value):
-            raise ValueError("recipient must be a valid email address")
+            raise ValueError("收件人必须是有效的邮箱地址")
         return value
 
 
@@ -44,7 +44,7 @@ class MockEmailTool:
         try:
             email = MockEmailInput.model_validate(input)
         except ValidationError as exc:
-            raise ValueError("invalid mock email input") from exc
+            raise ValueError("模拟邮件输入无效") from exc
         return ToolResult(
             tool_name=self.name,
             output={"status": "simulated", "to": str(email.to), "subject": email.subject},

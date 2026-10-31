@@ -43,18 +43,18 @@ def test_nested_input_is_snapshotted_on_construction() -> None:
 def test_goal_step_and_history_are_validated() -> None:
     with pytest.raises(ValueError, match="goal"):
         TaskState(goal="  ")
-    with pytest.raises(ValueError, match="non-negative"):
+    with pytest.raises(ValueError, match="非负整数"):
         TaskState(goal="Inspect", step=-1)
-    with pytest.raises(ValueError, match="history length"):
+    with pytest.raises(ValueError, match="history 长度"):
         TaskState(goal="Inspect", step=1)
-    with pytest.raises(ValueError, match="consecutive"):
+    with pytest.raises(ValueError, match="连续"):
         TaskState(goal="Inspect", step=1, history=(StepRecord(2, "lookup"),))
 
 
 def test_state_rejects_non_json_values_and_non_finite_numbers() -> None:
-    with pytest.raises(ValueError, match="JSON-compatible"):
+    with pytest.raises(ValueError, match="JSON 兼容"):
         TaskState(goal="Inspect", context={"unsupported": object()})
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(ValueError, match="有限"):
         TaskState(goal="Inspect", context={"score": float("nan")})
 
 
@@ -71,18 +71,18 @@ def test_budget_starts_full_and_consumes_immutably() -> None:
 def test_zero_budgets_are_valid_and_exhausted() -> None:
     budget = ExecutionBudget(max_steps=0, max_model_calls=0)
 
-    with pytest.raises(ValueError, match="step budget is exhausted"):
+    with pytest.raises(ValueError, match="步数预算已耗尽"):
         budget.consume_step()
-    with pytest.raises(ValueError, match="model-call budget is exhausted"):
+    with pytest.raises(ValueError, match="模型调用预算已耗尽"):
         budget.consume_model_call()
 
 
 def test_budget_rejects_invalid_limits_and_remaining_counts() -> None:
-    with pytest.raises(ValueError, match="non-negative integer"):
+    with pytest.raises(ValueError, match="非负整数"):
         ExecutionBudget(max_steps=True, max_model_calls=1)
-    with pytest.raises(ValueError, match="non-negative integer"):
+    with pytest.raises(ValueError, match="非负整数"):
         ExecutionBudget(max_steps=1, max_model_calls=1, remaining_steps=-1)
-    with pytest.raises(ValueError, match="must not exceed"):
+    with pytest.raises(ValueError, match="不得超过上限"):
         ExecutionBudget(max_steps=1, max_model_calls=1, remaining_model_calls=2)
 
 

@@ -32,7 +32,7 @@ class WriteFileTool:
 
     def __init__(self, root: str | Path, *, allow_overwrite: bool = False, max_bytes: int = 1_000_000) -> None:
         if max_bytes < 1:
-            raise ValueError("max_bytes must be positive")
+            raise ValueError("max_bytes 必须为正数")
         self._root = Path(root).resolve()
         self._root.mkdir(parents=True, exist_ok=True)
         self._allow_overwrite = allow_overwrite
@@ -42,34 +42,34 @@ class WriteFileTool:
         try:
             request = WriteFileInput.model_validate(input)
         except ValidationError as exc:
-            raise ValueError("invalid file write input") from exc
+            raise ValueError("文件写入输入无效") from exc
         relative = Path(request.path)
         if relative.is_absolute() or ".." in relative.parts:
-            raise ValueError("file path must stay within the configured root")
+            raise ValueError("文件路径必须位于配置的根目录内")
         destination = self._root / relative
         resolved = destination.resolve()
         try:
             resolved.relative_to(self._root)
         except ValueError as exc:
-            raise ValueError("file path must stay within the configured root") from exc
+            raise ValueError("文件路径必须位于配置的根目录内") from exc
         content = request.content.encode("utf-8")
         if len(content) > self._max_bytes:
-            raise ValueError("file content exceeds the configured size limit")
+            raise ValueError("文件内容超过配置的大小上限")
         if resolved.exists() and not self._allow_overwrite:
-            raise ValueError("overwriting an existing file is not allowed")
+            raise ValueError("不允许覆盖已存在的文件")
         if resolved.exists() and not resolved.is_file():
-            raise ValueError("destination must be a regular file")
+            raise ValueError("目标必须是普通文件")
         resolved.parent.mkdir(parents=True, exist_ok=True)
         try:
             resolved.relative_to(self._root)
         except ValueError as exc:
-            raise ValueError("file path must stay within the configured root") from exc
+            raise ValueError("文件路径必须位于配置的根目录内") from exc
         if not self._allow_overwrite:
             try:
                 with resolved.open("xb") as handle:
                     handle.write(content)
             except FileExistsError as exc:
-                raise ValueError("overwriting an existing file is not allowed") from exc
+                raise ValueError("不允许覆盖已存在的文件") from exc
         else:
             with resolved.open("wb") as handle:
                 handle.write(content)

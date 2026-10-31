@@ -98,27 +98,27 @@ async def test_fenced_json_is_parsed(tmp_path: Any) -> None:
 @pytest.mark.asyncio
 async def test_a_non_object_completion_is_refused(tmp_path: Any) -> None:
     subject, _ = resolver(tmp_path, '["expression", "2 + 2"]')
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(ValueError, match="JSON 对象"):
         await subject.resolve("calculator", state())
 
 
 @pytest.mark.asyncio
 async def test_an_empty_object_is_refused(tmp_path: Any) -> None:
     subject, _ = resolver(tmp_path, "{}")
-    with pytest.raises(ValueError, match="JSON object"):
+    with pytest.raises(ValueError, match="JSON 对象"):
         await subject.resolve("calculator", state())
 
 
 @pytest.mark.asyncio
 async def test_an_object_with_no_known_field_is_refused(tmp_path: Any) -> None:
     subject, _ = resolver(tmp_path, '{"equation": "2 + 2"}')
-    with pytest.raises(ValueError, match="no argument the tool accepts"):
+    with pytest.raises(ValueError, match="没有给出工具接受的任何参数"):
         await subject.resolve("calculator", state())
 
 
 @pytest.mark.asyncio
 async def test_unknown_fields_are_returned_for_the_tool_to_refuse(tmp_path: Any) -> None:
-    """The resolver does not filter: the tool's own schema is the authority."""
+    """解析器不做过滤：工具自身的 schema 才是权威。"""
     subject, _ = resolver(tmp_path, '{"expression": "2 + 2", "surprise": 1}')
     assert await subject.resolve("calculator", state()) == {
         "expression": "2 + 2",
@@ -129,14 +129,14 @@ async def test_unknown_fields_are_returned_for_the_tool_to_refuse(tmp_path: Any)
 @pytest.mark.asyncio
 async def test_an_unregistered_action_is_refused(tmp_path: Any) -> None:
     subject, _ = resolver(tmp_path, '{"expression": "2 + 2"}')
-    with pytest.raises(ValueError, match="not registered"):
+    with pytest.raises(ValueError, match="未注册"):
         await subject.resolve("drop_database", state())
 
 
 @pytest.mark.asyncio
 async def test_a_provider_error_carries_its_category(tmp_path: Any) -> None:
     subject = LLMArgumentResolver(BrokenCompleter(), MODEL, registry(tmp_path))
-    with pytest.raises(ValueError, match="argument synthesis failed: http"):
+    with pytest.raises(ValueError, match="参数合成失败：http"):
         await subject.resolve("calculator", state())
 
 
@@ -149,8 +149,8 @@ async def test_a_long_history_is_clipped(tmp_path: Any) -> None:
     await subject.resolve("calculator", advanced)
 
     prompt = completer.prompts[0]
-    # The clip is per result, so each history line stays bounded no matter how
-    # long the run gets; the prompt as a whole still grows with the step count.
+    # 裁剪是按每条结果进行的，因此无论运行多长，每行历史都保持有界；
+    # 提示词整体仍会随步骤数增长。
     history_lines = [line for line in prompt.split("\n") if line.startswith("- step ")]
     assert len(history_lines) == 6
     assert all(len(line) <= 530 for line in history_lines)
@@ -182,14 +182,14 @@ async def test_the_delegate_returns_the_model_text() -> None:
 @pytest.mark.asyncio
 async def test_the_delegate_refuses_an_empty_answer() -> None:
     delegate = LLMDelegate(StubCompleter("   "), MODEL)
-    with pytest.raises(ValueError, match="no result"):
+    with pytest.raises(ValueError, match="没有返回结果"):
         await delegate.delegate(state())
 
 
 @pytest.mark.asyncio
 async def test_the_delegate_carries_a_provider_error_category() -> None:
     delegate = LLMDelegate(BrokenCompleter(), MODEL)
-    with pytest.raises(ValueError, match="delegation failed: http"):
+    with pytest.raises(ValueError, match="委托失败：http"):
         await delegate.delegate(state())
 
 
