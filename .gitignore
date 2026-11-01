@@ -24,6 +24,9 @@ build/
 evals-report*.json
 evals-calibration.json
 
+# write_file 的运行时工作区：内容是任务产物，不是源码
+workspace/
+
 # Local data and secrets
 *.sqlite
 *.sqlite3
