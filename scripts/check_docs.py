@@ -11,7 +11,16 @@ import re
 import sys
 from pathlib import Path
 
-SKIP_DIRS = {".git", ".venv", "node_modules", ".next", ".pytest_tmp", ".mypy_cache", ".ruff_cache"}
+SKIP_DIRS = {
+    ".git",
+    ".workbuddy",
+    ".venv",
+    "node_modules",
+    ".next",
+    ".pytest_tmp",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 
 # [文字](目标) 或 [文字](目标 "标题")
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
