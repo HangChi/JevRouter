@@ -327,11 +327,21 @@ class Runner:
                 diagnostic=f"验证被拒绝：{exc}",
             )
         if assessment.completion_probability < self._completion_threshold and verified is state:
+            # 这条守卫实际只能由 finish 触发：其余分支（执行工具、委托、追问）
+            # 都会推进状态，两次验证之间状态对象必然不同。所以它测的是
+            # 「路由说做完了，验证器不同意」——这是两个判断者的分歧，不是卡死。
+            # 工作可能真的做完了（工具结果就在 trace 里），该交给人判断，
+            # 而不是由代码替人下「失败」的结论。
             return _Verified(
                 budget=budget,
                 assessment=assessment,
-                status="failed",
-                diagnostic="状态没有变化，验证器也认为没有进展",
+                status="needs_confirmation",
+                diagnostic=(
+                    "路由认为任务已经完成，但验证器对同一状态连续给出低于阈值的"
+                    f"完成概率（{assessment.completion_probability:.2f} < "
+                    f"{self._completion_threshold:.2f}）；"
+                    "工具结果可能已经达成目标，是否接受这个结果需要人工判断"
+                ),
             )
         return _Verified(budget=budget, assessment=assessment)
 

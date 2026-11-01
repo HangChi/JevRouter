@@ -208,7 +208,12 @@ async def test_finish_before_any_step_skips_verification() -> None:
 
 
 @pytest.mark.asyncio
-async def test_repeated_incomplete_verification_of_unchanged_state_fails() -> None:
+async def test_finish_the_verifier_disagrees_with_asks_a_human() -> None:
+    """路由说做完了、验证器连续否掉，是两个人的分歧，不该由代码判失败。
+
+    工作可能真的完成了（工具结果就在 trace 里）。停下来问人比替人下结论正确，
+    也比判 failed 更接近事实。
+    """
     fake = FakeJev()
     fake.routes.append(route_answers("calculator"))
     fake.verifies.append(verify_answers(0.3))
@@ -217,8 +222,26 @@ async def test_repeated_incomplete_verification_of_unchanged_state_fails() -> No
 
     result = await build(fake, resolver=StubResolver()).run("Calculate 2 + 2")
 
-    assert result.status == "failed"
-    assert "没有进展" in (result.diagnostic or "")
+    assert result.status == "needs_confirmation"
+    assert "人工判断" in (result.diagnostic or "")
+    assert "0.30" in (result.diagnostic or "")
+    assert fake.route_calls() == 2
+    assert fake.verify_calls() == 2
+
+
+async def test_the_tool_result_survives_the_disagreement() -> None:
+    """分歧不应吞掉已经产生的副作用：结果与 trace 都要留下来供人核对。"""
+    fake = FakeJev()
+    fake.routes.append(route_answers("calculator"))
+    fake.verifies.append(verify_answers(0.3))
+    fake.routes.append(route_answers("finish"))
+    fake.verifies.append(verify_answers(0.3))
+
+    result = await build(fake, resolver=StubResolver()).run("Calculate 2 + 2")
+
+    assert dict(result.state.last_result) == {"result": 4.0}
+    assert len(result.traces) == 2
+    assert result.traces[0].executed is True
     assert fake.route_calls() == 2
     assert fake.verify_calls() == 2
 

@@ -126,7 +126,9 @@ verifier 只做评估：不设完成阈值、不修改状态、不执行工具�
 
 一次迭代消耗 1 个 step 和 1 次 route 模型调用；execute 路径再加 1 次 verify 调用，delegate 路径再加 1 次。循环顶部同时检查两个计数器再消费，避免"先吃掉一个 step 才报告耗尽"。构造时要求 `max_model_calls >= 2 * max_steps`，否则一次可完成的迭代也会被误报成 `budget_exhausted`。
 
-完成阈值由 Runner 持有（默认 0.75，与 Policy Engine 的 MVP 阈值一致），验证不通过就带着前进后的 state 重新路由。若同一个未变化的 state 第二次被判为未完成，直接以 `failed` 停止并留下诊断，而不是把同样的 payload 反复发给 provider 直到预算耗尽。
+完成阈值由 Runner 持有（默认 0.75），验证不通过就带着前进后的 state 重新路由。若同一个未变化的 state 第二次被判为未完成，则停下来交给人：终态 `needs_confirmation`，诊断里写明「路由认为已完成、验证器给出 X < Y」，而不是把同样的 payload 反复发给 provider 直到预算耗尽。
+
+这条守卫看起来像「防止无效循环」，实际上它只能由 `finish` 触发：其余分支（执行工具、委托、追问）都会推进状态，两次验证之间状态对象必然不同。所以它测的从来不是「循环卡死」，而是**路由与验证器的分歧**。原先这里返回 `failed`，等于让代码替人下「这事没成」的结论——而工具结果就摆在 trace 里，很可能真的做完了。改成 `needs_confirmation` 之后，判断权回到人手上，代价只是这类任务不再自动收尾。
 
 四个协作者通过 Protocol 注入，缺省全部 fail closed：`ActionInputResolver`（缺省 `{}`，由工具自身 schema 拒绝）、`ConfirmationHandler`（缺省 `needs_confirmation`）、`UserInputHandler`（缺省 `needs_user_input`）、`DelegateHandler`（缺省 `failed`）。`ActionInputResolver` 是参数合成的接缝——`RouteDecision` 只给动作名不给参数，而参数合成属于 LLM 职责；第十三阶段用 `LLMArgumentResolver` 填上了这个接缝。
 
